@@ -1,1 +1,1 @@
-Hello! This project is intended as a Senior Capstone project for Appstate CompSci. We intend to create a program that can interpret text to derive characters and create appropriate voices in an "audiobook" format.
+Hello! This project is intended as a Senior Capstone project for Appstate CompSci. We intend to create a program prototype that can interpret text to derive characters and create appropriate voices in an "audiobook" format.
