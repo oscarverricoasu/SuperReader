@@ -12,5 +12,19 @@ output = nlp(input)
 
 # This will print a list of all scanned words and what part of speech each work is, tokenizing the text.
 print("Tokens generated from input text: ")
+
 for token in output:
     print(token.text + " " + token.pos_)
+
+
+print("\n")
+
+
+# Named Entity recognition from analyzed text and their assigned label
+print("Named Entities recognized in text: ")
+
+if len(output.ents) == 0:
+    print("None discovered")
+else:
+    for ent in output.ents:
+        print(ent.text + " " + ent.label_)
