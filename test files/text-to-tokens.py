@@ -6,7 +6,7 @@ nlp = spacy.load("en_core_web_sm")
 
 
 
-input = "The quick brown fox jumped over the lazy dog."
+input = "The quick brown fox jumped over Kablamno the alien from way outer space."
 
 output = nlp(input)
 
@@ -21,7 +21,7 @@ print("\n")
 
 
 # Named Entity recognition from analyzed text and their assigned label
-print("Named Entities recognized in text: ")
+print("Named entities recognized in text: ")
 
 if len(output.ents) == 0:
     print("None discovered")
