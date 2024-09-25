@@ -10,7 +10,8 @@ cloudpathlib==0.19.0
 colorama==0.4.6
 confection==0.1.4
 cymem==2.0.8
-en_core_web_sm==3.7.1
+EbookLib==0.18
+en-core-web-sm==3.7.1
 h2==4.1.0
 hpack==4.0.0
 hyperframe==6.0.1
@@ -18,6 +19,7 @@ idna==3.8
 Jinja2==3.1.4
 langcodes==3.4.0
 language_data==1.2.0
+lxml==5.3.0
 marisa-trie==1.1.0
 markdown-it-py==3.0.0
 MarkupSafe==2.1.5
@@ -37,6 +39,7 @@ requests==2.32.3
 rich==13.7.1
 setuptools==73.0.1
 shellingham==1.5.4
+six==1.16.0
 smart_open==7.0.4
 spacy==3.7.5
 spacy-legacy==3.0.12
@@ -53,6 +56,3 @@ weasel==0.4.1
 wheel==0.44.0
 wrapt==1.16.0
 zstandard==0.23.0
-
-mysql>=5.7.24
-mysql-connector-python>=9.0.0
