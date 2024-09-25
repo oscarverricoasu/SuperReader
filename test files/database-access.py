@@ -3,10 +3,11 @@ from mysql.connector import errorcode
 
 #need to change this config to connect to student machine, i don't know how yet since it has to go through a vpn
 config = {
-    'user': 'root',
+    'user': 'SuperReader',
     'password': '',
     'host': 'localhost',
-    'database': 'SuperReader'
+    'database': 'SuperReader',
+    'port': '5000'
 }
 
 # Command string to create a Characters tabel for a text
