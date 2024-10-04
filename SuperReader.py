@@ -1,5 +1,6 @@
 import spacy
 import en_core_web_sm
+from ReadFile import readfile
 
 
 # Load SpaCy Module
@@ -193,16 +194,26 @@ def process_by_sentences(document):
 
 # # # DRIVER FOR PROGRAM # # #
 
+if __name__ == "__main__":
+    # Get the text to be processed
+    input = readfile()
+    file = input.getInput()
+    input.checkFile(file)
+    if file.endswith(".pdf"):
+        input.readPDF(file)
+    elif file.endswith(".epub"):
+        input.readEPUB(file)
+    elif file.endswith(".txt"):
+        input.readTXT(file)
+    else: #for unsupported filetypes/random nonsense
+        print("Invalid input")
 
-# Get the text to be processed
-# text = input("Prompt for file or raw text")
+    # Process the text
+    doc = nlp(text)
 
-# Process the text
-doc = nlp(text)
+    # Determine structure of text
+    pick_process(doc)
 
-# Determine structure of text
-pick_process(doc)
-
-# debug for values stored in dataset
-print(speakers)
+    # debug for values stored in dataset
+    print(speakers)
 
