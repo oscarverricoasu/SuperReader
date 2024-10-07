@@ -6,7 +6,7 @@ import en_core_web_sm
 nlp = spacy.load("en_core_web_sm")
 
 # Load Text Module
-text = ''
+# text = ('The quick brown fox jumped over the crazy rabid dog.')
 
 
 
@@ -17,6 +17,12 @@ current_speaker = None                              # Pointer to the current spe
 recent_speakers = []                                # Buffer to keep most recent speakers of a text
 buffer_size = 3                                     # Max size of the recent speakers list
 
+superbook = []                                      # This will hold the speakers and spoken lines in order
+
+
+
+
+
 
 # # # HELPER FUNCTIONS # # #
 
@@ -25,7 +31,7 @@ buffer_size = 3                                     # Max size of the recent spe
 def is_dialogue(input_text):
     print("Used is_dialogue")  # debug flag
 
-    return any(token.lemma_ in dialogue_indicators for token in input_text)
+    return not any(token.is_punct and token.text == "." for token in input_text)
 
 # Function to add speaker with gender and number information
 def add_speaker(speaker_name, gender="unknown", number="singular"):
@@ -112,7 +118,7 @@ def pick_process(document):
     print("Used pick_process") # debug flag
 
     lines = document.text.strip().split('\n')
-    if len(lines) > len(list(doc.sents)):
+    if len(lines) < len(list(doc.sents)):
         process_by_lines(lines)
     else:
         process_by_sentences(doc)
@@ -155,6 +161,9 @@ def process_by_lines(lines):
             add_speaker("Narrator")
             add_to_context_buffer(current_speaker, line)
 
+        # Add to SuperBook structure
+        superbook.append({'speaker': current_speaker, 'text': line})
+
 
 # Sentence Iterator Analysis Process
 def process_by_sentences(document):
@@ -189,13 +198,15 @@ def process_by_sentences(document):
             add_speaker("Narrator")
             add_to_context_buffer(current_speaker, sentence)
 
+        # Add to SuperBook structure
+        superbook.append({'speaker': current_speaker, 'text': sentence.text})
 
 
 # # # DRIVER FOR PROGRAM # # #
 
 
 # Get the text to be processed
-# text = input("Prompt for file or raw text")
+text = input("Prompt for file or raw text")
 
 # Process the text
 doc = nlp(text)
@@ -204,5 +215,6 @@ doc = nlp(text)
 pick_process(doc)
 
 # debug for values stored in dataset
-print(speakers)
+print("Speakers: ", speakers)
+print("SuperBook: ", superbook)
 
