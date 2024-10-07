@@ -27,7 +27,8 @@ class readfile:
             page = pdf[i]
             textpage = page.get_textpage()
             words += textpage.get_text_range()
-            print(words) #temporary printing for testing
+            #print(words) #temporary printing for testing
+        return words
     
     def readEPUB(self, file):
         book = epub.read_epub(file, {'ignore_ncx': True})
@@ -36,11 +37,13 @@ class readfile:
             if item.get_type() == ebooklib.ITEM_DOCUMENT:
                 body = item.get_body_content().decode()
                 parser.feed(body) #temporary printing for testing
+                return '' #this needs to return the epub text
     
     def readTXT(self, file):
         with open(file, encoding="utf-8") as read:
             words = read.read()
-            print(words) #temporary printing for testing
+            #print(words) #temporary printing for testing
+            return words
     
 if __name__ == "__main__": #for testing reading without driver functions
     test = readfile()
