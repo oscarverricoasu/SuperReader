@@ -195,16 +195,17 @@ def process_by_sentences(document):
 # # # DRIVER FOR PROGRAM # # #
 
 if __name__ == "__main__":
-    # Get the text to be processed
+    
+    # Get the text to be processedi
     input = readfile()
     file = input.getInput()
-    input.checkFile(file)
+    input.checkFile(file) #this needs to actually stop the progam
     if file.endswith(".pdf"):
-        input.readPDF(file)
+        text = input.readPDF(file)
     elif file.endswith(".epub"):
-        input.readEPUB(file)
+        text = input.readEPUB(file)
     elif file.endswith(".txt"):
-        input.readTXT(file)
+        text = input.readTXT(file)
     else: #for unsupported filetypes/random nonsense
         print("Invalid input")
 
