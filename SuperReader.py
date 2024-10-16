@@ -166,5 +166,6 @@ if __name__ == "__main__":
     pick_process(doc)
 
     # Debug for values stored in dataset
+    print()
     print("Speakers: ", speakers)
     print("SuperBook: ", superbook)
