@@ -2,6 +2,7 @@ import ebooklib
 from ebooklib import epub
 from html.parser import HTMLParser
 import pypdfium2 as pdfium
+import pypdfium2.raw as pdfium_c
 
 class Parse(HTMLParser): #html parser for epub
     def handle_data(self, data):
@@ -26,8 +27,9 @@ class readfile:
         for i in range(n_pages):
             page = pdf[i]
             textpage = page.get_textpage()
-            words += textpage.get_text_range()
+            words += textpage.get_text_bounded()
             #print(words) #temporary printing for testing
+        pdf.close()
         return words
     
     def readEPUB(self, file):
