@@ -147,7 +147,7 @@ def process_by_sentences(document):
 if __name__ == "__main__":
     # Get the text to be processed
     input = readfile()
-    file = input.getInput()
+    file = input.getInput() #do something whileloopish to run until valid input
     input.checkFile(file)  # This needs to actually stop the program
 
     if file.endswith(".pdf"):
