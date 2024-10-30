@@ -174,8 +174,9 @@ def guess_genders_for_speakers(speakers):
 # Driver to process the input file
 if __name__ == "__main__":
     input = readfile()
-    file = input.getInput()
-    input.checkFile(file)
+
+    file = input.getInput() #do something whileloopish to run until valid input
+    input.checkFile(file)  # This needs to actually stop the program
 
     if file.endswith(".pdf"):
         text = input.readPDF(file)
