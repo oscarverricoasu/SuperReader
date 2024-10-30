@@ -1,5 +1,6 @@
 import spacy
 from ReadFile import readfile
+from names_dataset import NameDataset, NameWrapper
 
 # Load SpaCy Model
 nlp = spacy.load("en_core_web_sm")
@@ -9,11 +10,30 @@ current_speaker = "Narrator"    # Set Narrator as the initial speaker
 previous_speaker = None         # Keep track of the last valid speaker for dialogue continuity
 speakers = []                   # List of detected speakers
 superbook = []                  # Output with speakers and their text
+nd = NameDataset()              # Dataset to guess gender of names that are unknown
 
-# Add a speaker to the list if they are not already there
+# Add a speaker to the list if they are not already there, with inferred gender if available
 def add_speaker(speaker_name, gender="unknown", number="singular"):
-    if not any(speaker['name'] == speaker_name for speaker in speakers):
-        speakers.append({'name': speaker_name, 'gender': gender, 'number': number})
+    for speaker in speakers:
+        if speaker['name'] == speaker_name:
+            # Update gender if it’s unknown and we now have new information
+            if speaker['gender'] == "unknown" and gender != "unknown":
+                speaker['gender'] = gender
+            return
+    # Add a new speaker if they don’t already exist
+    speakers.append({'name': speaker_name, 'gender': gender, 'number': number})
+
+# Function to infer gender based on pronouns in the text
+def infer_gender_from_pronouns(doc):
+    gender = "unknown"
+    for token in doc:
+        if token.pos_ == "PRON":
+            if token.lower_ in {"he", "him", "his"}:
+                return "male"
+            elif token.lower_ in {"she", "her", "hers"}:
+                return "female"
+
+    return gender
 
 # Function to split lines containing both narration and dialogue
 def split_narration_dialogue(line):
@@ -101,6 +121,7 @@ def process_by_lines(lines):
     for line in lines:
         line_doc = nlp(line)
         named_speaker = get_named_speaker(line_doc)
+        gender = infer_gender_from_pronouns(line_doc) if named_speaker else "unknown"
 
         # Split the line into narration and dialogue
         line_parts = split_narration_dialogue(line)
@@ -110,7 +131,7 @@ def process_by_lines(lines):
             if part['type'] == 'dialogue':
                 if named_speaker:
                     current_speaker = named_speaker
-                    add_speaker(current_speaker)
+                    add_speaker(current_speaker, gender=gender)
                     if current_speaker not in potential_speakers:
                         potential_speakers.append(current_speaker)
                 else:
@@ -130,13 +151,25 @@ def process_by_lines(lines):
                 # Handle narration
                 speaker_in_narration = get_speaker_from_narration(part['text'])
                 if speaker_in_narration:
-                    add_speaker(speaker_in_narration)
+                    narration_gender = infer_gender_from_pronouns(nlp(part['text']))
+                    add_speaker(speaker_in_narration, gender=narration_gender)
                     superbook.append({'speaker': 'Narrator', 'text': part['text']})
                     previous_speaker = speaker_in_narration
                     if speaker_in_narration not in potential_speakers:
                         potential_speakers.append(speaker_in_narration)
                 else:
                     superbook.append({'speaker': 'Narrator', 'text': part['text']})
+
+
+# Passer to guess unknown gender for named speakers
+def guess_genders_for_speakers(speakers):
+    for speaker in speakers:
+        name = speaker.get('name')
+        if name != "Narrator":
+            gender = NameWrapper(nd.search(name)).gender.lower()
+            add_speaker(name, gender=gender, number=speaker.get('number'))
+
+
 
 # Driver to process the input file
 if __name__ == "__main__":
@@ -158,8 +191,11 @@ if __name__ == "__main__":
     lines = text.strip().split('\n')
     process_by_lines(lines)
 
-    # Ensure 'Narrator' is added to speakers list
+    # Initiate Narrator
     add_speaker('Narrator')
+
+    # Query for missing gender for named speakers
+    guess_genders_for_speakers(speakers)
 
     # Output results
     print("\nSpeakers: ")
@@ -169,4 +205,3 @@ if __name__ == "__main__":
     print("\nSuperBook: ")
     for elem in superbook:
         print(elem)
-
