@@ -1,5 +1,6 @@
 import spacy
 from ReadFile import readfile
+from TextToSpeech import OutputSpeech
 from names_dataset import NameDataset, NameWrapper
 
 # Load SpaCy Model
@@ -206,3 +207,10 @@ if __name__ == "__main__":
     print("\nSuperBook: ")
     for elem in superbook:
         print(elem)
+    
+    # Text to Speech
+    tts = OutputSpeech()
+    tts.getwav(lines, file) #lines is a list
+
+    #Easy indication for completion (placeholder)
+    print("Done")
