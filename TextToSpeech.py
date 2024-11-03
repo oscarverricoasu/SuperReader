@@ -11,8 +11,12 @@ class OutputSpeech:
         #Init TTS
         tts = TTS("tts_models/en/ljspeech/tacotron2-DDC").to(device)
 
+        iter = 0
         #Run TTS
-        #Text to speech list of amplitude values as output
-        wav = tts.tts(text=words[0])
-        #Text to speech to a file
-        tts.tts_to_file(text=words[0], file_path= file + ".wav")
+        for iter in range(len(words)):
+            #Text to speech list of amplitude values as output
+            wav = tts.tts(text=words[iter])
+            #Text to speech to a file
+            tts.tts_to_file(text=words[iter], file_path= file + str(iter) + ".wav")
+
+        #combine wav files into one?
