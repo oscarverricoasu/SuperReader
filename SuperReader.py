@@ -1,5 +1,7 @@
 import spacy
 from TTS.api import TTS
+from numpy.core.defchararray import endswith
+
 from ReadFile import readfile
 from names_dataset import NameDataset, NameWrapper
 import jsonlines
@@ -8,6 +10,9 @@ import librosa
 import soundfile as sf
 import time
 
+
+# Start Loading time counter
+start_load = time.time()
 
 # Load SpaCy Model
 nlp = spacy.load("en_core_web_sm")
@@ -235,10 +240,17 @@ def save_results_to_jsonlines(filename):
 
 # Driver to process the input file
 if __name__ == "__main__":
+    # End the initial loading timer and wait for user input
+    end_load = time.time()
+
     input = readfile()
-    start_time = time.time()
+
 
     file = input.getInput() #do something whileloopish to run until valid input
+
+    #start second timer for loading the file to be read
+    start_second_load = time.time()
+
     input.checkFile(file)  # This needs to actually stop the program
 
     if file.endswith(".pdf"):
@@ -250,6 +262,10 @@ if __name__ == "__main__":
     else:
         print("Invalid input")
         exit()
+
+    # Switch Timers
+    end_second_load = time.time()
+    start_time = time.time()
 
     # Process the text
     lines = text.strip().split('\n')
@@ -270,6 +286,7 @@ if __name__ == "__main__":
 
     #Easy indication for completion (placeholder)
     end_time = time.time()
-    elapsed_time = end_time - start_time
-    print(f"Done. Elapsed Time: {elapsed_time}")
+    elapsed_load = "{:.2f}".format((end_load - start_load) + (end_second_load - start_second_load))
+    elapsed_time = "{:.2f}".format(end_time - start_time)
+    print(f"Done. Elapsed loading time: {elapsed_load} seconds, Elapsed computation time: {elapsed_time} seconds")
 
