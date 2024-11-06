@@ -6,6 +6,8 @@ import jsonlines
 import random
 import librosa
 import soundfile as sf
+import time
+
 
 # Load SpaCy Model
 nlp = spacy.load("en_core_web_sm")
@@ -234,6 +236,7 @@ def save_results_to_jsonlines(filename):
 # Driver to process the input file
 if __name__ == "__main__":
     input = readfile()
+    start_time = time.time()
 
     file = input.getInput() #do something whileloopish to run until valid input
     input.checkFile(file)  # This needs to actually stop the program
@@ -266,4 +269,7 @@ if __name__ == "__main__":
     save_results_to_jsonlines(file)
 
     #Easy indication for completion (placeholder)
-    print("Done")
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"Done. Elapsed Time: {elapsed_time}")
+
