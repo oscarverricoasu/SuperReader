@@ -17,9 +17,9 @@ speakers = []                   # List of detected speakers
 superbook = []                  # Output with speakers and their text
 nd = NameDataset()              # Dataset to guess gender of names that are unknown
 
-male_tts_model = TTS(model_name="tts_models/en/ljspeech/tacotron2-DCA", gpu=False)
+#male_tts_model = TTS(model_name="tts_models/en/ljspeech/tacotron2-DCA", gpu=False)
                                 # base male model for tts
-female_tts_model = TTS(model_name="tts_models/en/ljspeech/tacotron2-DCA", gpu=False)
+#female_tts_model = TTS(model_name="tts_models/en/ljspeech/tacotron2-DCA", gpu=False)
                                 # base female model for tts
 
 
@@ -258,14 +258,6 @@ if __name__ == "__main__":
     # Query for missing gender for named speakers
     guess_genders_for_speakers(speakers)
 
-    # Output results
-    print("\nSpeakers: ")
-    for elem in speakers:
-        print(elem)
-
-    print("\nSuperBook: ")
-    for elem in superbook:
-        print(elem)
     
     # Text to Speech
     # audio_superbook()
