@@ -1,7 +1,11 @@
 import spacy
+from TTS.api import TTS
 from ReadFile import readfile
-from TextToSpeech import OutputSpeech
 from names_dataset import NameDataset, NameWrapper
+import jsonlines
+import random
+import librosa
+import soundfile as sf
 
 # Load SpaCy Model
 nlp = spacy.load("en_core_web_sm")
@@ -13,6 +17,12 @@ speakers = []                   # List of detected speakers
 superbook = []                  # Output with speakers and their text
 nd = NameDataset()              # Dataset to guess gender of names that are unknown
 
+male_tts_model = TTS(model_name="tts_models/en/ljspeech/tacotron2-DCA", gpu=False)
+                                # base male model for tts
+female_tts_model = TTS(model_name="tts_models/en/ljspeech/tacotron2-DCA", gpu=False)
+                                # base female model for tts
+
+
 # Add a speaker to the list if they are not already there, with inferred gender if available
 def add_speaker(speaker_name, gender="unknown", number="singular"):
     for speaker in speakers:
@@ -22,7 +32,12 @@ def add_speaker(speaker_name, gender="unknown", number="singular"):
                 speaker['gender'] = gender
             return
     # Add a new speaker if they don’t already exist
-    speakers.append({'name': speaker_name, 'gender': gender, 'number': number})
+    speakers.append({
+        'name': speaker_name,
+        'gender': gender,
+        'number': number,
+        'pitch factor': random.uniform(0.8,1.3) # pitch modifier unique to a character's voice
+    })
 
 # Function to infer gender based on pronouns in the text
 def infer_gender_from_pronouns(doc):
@@ -167,9 +182,53 @@ def guess_genders_for_speakers(speakers):
     for speaker in speakers:
         name = speaker.get('name')
         if name != "Narrator":
-            gender = NameWrapper(nd.search(name)).gender.lower()
-            add_speaker(name, gender=gender, number=speaker.get('number'))
+            search_result = nd.search(name)
+            if search_result:
+                gender = NameWrapper(search_result).gender.lower()
+                add_speaker(name, gender=gender, number=speaker.get('number'))
 
+# This will build the audiobook  file from the text and tts model of each character
+def audio_superbook():
+    c = 0
+    for entry in superbook:
+        c = c + 1
+        speaker_name = entry['speaker']
+        text = entry['text']
+
+        speaker_data = next((s for s in speakers if s['name'] == speaker_name), None)
+
+        if speaker_data:
+            tts_model = female_tts_model if speaker_data['gender'] == "female" else male_tts_model
+            file_path = f"audio/{c}_{speaker_name}.wav"
+            tts_model.tts_to_file(text=text, file_path=file_path)
+            apply_pitch_shift(file_path,speaker_data['pitch factor'])
+        else:
+            print(f"No voice model found for {speaker_name}, skipping.")
+
+# Function that modifies a character's line by their unique pitch factor to have a distinct voice
+def apply_pitch_shift(file_path, pitch_factor):
+    # Load the audio file
+    y, sr = librosa.load(file_path)
+
+    # Apply pitch shift
+    y_shifted = librosa.effects.pitch_shift(y,sr=sr, n_steps=pitch_factor * 2)
+
+    # Save the modified audio back to the same file
+    sf.write(file_path, y_shifted, sr)
+
+# Function that generate a .json file as output for the program instead of printing results in the console
+def save_results_to_jsonlines(filename):
+    # Breaks up filename to have only the file's name and not the extension
+    start = filename.rfind('/') + 1                         # Start after the last "/"
+    end = filename.rfind('.')                               # End at the last "."
+    output_filename = str(filename[start:end]) + ".jsonl"
+
+    with jsonlines.open(output_filename, mode="w") as writer:
+        for speaker in speakers:
+            writer.write({"speakers": speaker})
+        writer.write({})
+        for entry in superbook:
+            writer.write({"superbook": entry})
 
 
 # Driver to process the input file
@@ -209,8 +268,10 @@ if __name__ == "__main__":
         print(elem)
     
     # Text to Speech
-    tts = OutputSpeech()
-    tts.getwav(lines, file) #lines is a list
+    # audio_superbook()
+
+    # Output results
+    save_results_to_jsonlines(file)
 
     #Easy indication for completion (placeholder)
     print("Done")
