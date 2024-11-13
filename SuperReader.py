@@ -1,12 +1,9 @@
 import spacy
 from TTS.api import TTS
-from numpy.core.defchararray import endswith
-
 from ReadFile import readfile
 from names_dataset import NameDataset, NameWrapper
 import jsonlines
 import random
-import librosa
 import soundfile as sf
 import time
 
@@ -213,15 +210,7 @@ def audio_superbook():
             print(f"No voice model found for {speaker_name}, skipping.")
 
 # Function that modifies a character's line by their unique pitch factor to have a distinct voice
-def apply_pitch_shift(file_path, pitch_factor):
-    # Load the audio file
-    y, sr = librosa.load(file_path)
 
-    # Apply pitch shift
-    y_shifted = librosa.effects.pitch_shift(y,sr=sr, n_steps=pitch_factor * 2)
-
-    # Save the modified audio back to the same file
-    sf.write(file_path, y_shifted, sr)
 
 # Function that generate a .json file as output for the program instead of printing results in the console
 def save_results_to_jsonlines(filename):
@@ -285,8 +274,16 @@ if __name__ == "__main__":
     save_results_to_jsonlines(file)
 
     #Easy indication for completion (placeholder)
+    print("Done!")
+
+    # Timer calculations
     end_time = time.time()
     elapsed_load = "{:.2f}".format((end_load - start_load) + (end_second_load - start_second_load))
-    elapsed_time = "{:.2f}".format(end_time - start_time)
-    print(f"Done. Elapsed loading time: {elapsed_load} seconds, Elapsed computation time: {elapsed_time} seconds")
+
+
+    hours, rem = divmod(end_time-start_time, 3600)
+    minutes, seconds = divmod(rem, 60)
+
+    print(f"Elapsed loading time: {elapsed_load} seconds")
+    print(f"Elapsed computation time: " + ("{:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds)))
 
