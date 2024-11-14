@@ -6,6 +6,8 @@ import jsonlines
 import random
 import soundfile as sf
 import time
+import librosa
+import os
 
 
 # Start Loading time counter
@@ -21,9 +23,11 @@ speakers = []                   # List of detected speakers
 superbook = []                  # Output with speakers and their text
 nd = NameDataset()              # Dataset to guess gender of names that are unknown
 
-#male_tts_model = TTS(model_name="tts_models/en/ljspeech/tacotron2-DCA", gpu=False)
+
+# these will be the same for now since they are lower in comp power
+male_tts_model = TTS(model_name="tts_models/en/ljspeech/tacotron2-DCA", gpu=False)
                                 # base male model for tts
-#female_tts_model = TTS(model_name="tts_models/en/ljspeech/tacotron2-DCA", gpu=False)
+female_tts_model = TTS(model_name="tts_models/en/ljspeech/tacotron2-DCA", gpu=False)
                                 # base female model for tts
 
 
@@ -34,7 +38,7 @@ def add_speaker(speaker_name, gender="unknown", number="singular"):
             # Update gender if it’s unknown and we now have new information
             if speaker['gender'] == "unknown" and gender != "unknown":
                 speaker['gender'] = gender
-            return
+            break
     # Add a new speaker if they don’t already exist
     speakers.append({
         'name': speaker_name,
@@ -166,7 +170,6 @@ def process_by_lines(lines):
 
                 superbook.append({'speaker': current_speaker, 'text': part['text']})
                 previous_speaker = current_speaker
-                last_speaker = current_speaker
             else:
                 # Handle narration
                 speaker_in_narration = get_speaker_from_narration(part['text'])
@@ -192,25 +195,50 @@ def guess_genders_for_speakers(speakers):
                 add_speaker(name, gender=gender, number=speaker.get('number'))
 
 # This will build the audiobook  file from the text and tts model of each character
-def audio_superbook():
+def audio_superbook(file_prefix):
     c = 0
+    total_files = len(superbook)
+    num_digits = len(str(total_files))
+
     for entry in superbook:
-        c = c + 1
+        c += 1
         speaker_name = entry['speaker']
         text = entry['text']
+
+        tts_model = (
+            female_tts_model if any(s['name'] == speaker_name and s['gender'] == "female" for s in speakers)
+            else male_tts_model
+        )
 
         speaker_data = next((s for s in speakers if s['name'] == speaker_name), None)
 
         if speaker_data:
-            tts_model = female_tts_model if speaker_data['gender'] == "female" else male_tts_model
-            file_path = f"audio/{c}_{speaker_name}.wav"
+            file_path = f"audio/{str(c).zfill(num_digits)}_{speaker_name}.wav"
             tts_model.tts_to_file(text=text, file_path=file_path)
-            apply_pitch_shift(file_path,speaker_data['pitch factor'])
+
+            # Wait until the file is fully written
+            while not (os.path.exists(file_path) and os.path.getsize(file_path) > 0):
+                # Check every 50 milliseconds
+                time.sleep(0.05)
+
+            audio_data, sr = librosa.load(file_path, sr=None)
+            shifted_audio = pitch_shift(audio_data, sr, speaker_data['pitch factor'])
+            sf.write(file_path, shifted_audio, sr)
         else:
             print(f"No voice model found for {speaker_name}, skipping.")
 
 # Function that modifies a character's line by their unique pitch factor to have a distinct voice
+def pitch_shift(input_file, sr, factor):
 
+    new_sr = int(sr * factor)
+
+    shifted_audio = librosa.resample(input_file, orig_sr=sr, target_sr=new_sr)
+
+    original_length = len(input_file) / sr
+    duration_stretch_factor = len(shifted_audio) / (sr * original_length)
+    stretched_audio = librosa.effects.time_stretch(shifted_audio, rate=duration_stretch_factor)
+
+    return stretched_audio
 
 # Function that generate a .json file as output for the program instead of printing results in the console
 def save_results_to_jsonlines(filename):
@@ -258,6 +286,9 @@ if __name__ == "__main__":
 
     # Process the text
     lines = text.strip().split('\n')
+
+
+
     process_by_lines(lines)
 
     # Initiate Narrator
@@ -268,7 +299,7 @@ if __name__ == "__main__":
 
     
     # Text to Speech
-    # audio_superbook()
+    audio_superbook()
 
     # Output results
     save_results_to_jsonlines(file)
