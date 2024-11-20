@@ -113,7 +113,10 @@ def get_speaker_from_narration(narration_text):
 # New function to alternate between two unnamed speakers
 def alternate_speakers_without_person_entities(lines):
     global current_speaker, previous_speaker
+
     unnamed_speakers = ['Unnamed Speaker 1', 'Unnamed Speaker 2']  # Define the two unnamed speakers
+    add_speaker('Unnamed Speaker 1', "unknown", "singular")
+    add_speaker('Unnamed Speaker 2', "unknown", "singular")
     current_speaker_index = 0  # Track which unnamed speaker is currently active
 
     for line in lines:
