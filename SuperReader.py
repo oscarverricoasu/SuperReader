@@ -195,7 +195,7 @@ def guess_genders_for_speakers(speakers):
                 add_speaker(name, gender=gender, number=speaker.get('number'))
 
 # This will build the audiobook  file from the text and tts model of each character
-def audio_superbook(file_prefix):
+def audio_superbook():
     c = 0
     total_files = len(superbook)
     num_digits = len(str(total_files))
