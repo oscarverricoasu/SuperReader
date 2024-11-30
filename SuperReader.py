@@ -1,139 +1,136 @@
 import spacy
 from TTS.api import TTS
+from TTS.server.server import speaker_manager
+
 from ReadFile import readfile
 from names_dataset import NameDataset, NameWrapper
 import jsonlines
 import random
 import soundfile as sf
 import time
-import librosa
 import os
+import re
+import logging
+from concurrent.futures import ThreadPoolExecutor
+from pydub import AudioSegment
 
 
-# Start Loading time counter
-start_load = time.time()
+# Initialize logging
+logging.basicConfig(level=logging.INFO)
 
-# Load SpaCy Model
+# Load SpaCy Model and TTS stuff
 nlp = spacy.load("en_core_web_sm")
-
-# Initialize Data Holders
-current_speaker = "Narrator"    # Set Narrator as the initial speaker
-previous_speaker = None         # Keep track of the last valid speaker for dialogue continuity
-speakers = []                   # List of detected speakers
-superbook = []                  # Output with speakers and their text
-nd = NameDataset()              # Dataset to guess gender of names that are unknown
-
-
-# these will be the same for now since they are lower in comp power
-male_tts_model = TTS(model_name="tts_models/en/ljspeech/tacotron2-DCA", gpu=False)
-                                # base male model for tts
+male_tts_model   = TTS(model_name="tts_models/en/ljspeech/tacotron2-DCA", gpu=False)
 female_tts_model = TTS(model_name="tts_models/en/ljspeech/tacotron2-DCA", gpu=False)
-                                # base female model for tts
+PITCH_FACTOR_RANGE = (0.8, 1.3)
+
+# This will be the main encapsulation for speakers and the superbook structures
+class SpeakerManager:
+
+    # Initializer of data holders
+    def __init__(self):
+        self.speakers  = []
+        self.superbook = []
+        self.nd = NameDataset()  # Dataset to guess gender of names that are unknown
 
 
-# Add a speaker to the list if they are not already there, with inferred gender if available
-def add_speaker(speaker_name, gender="unknown", number="singular"):
-    for speaker in speakers:
-        if speaker['name'] == speaker_name:
-            # Update gender if it’s unknown and we now have new information
-            if speaker['gender'] == "unknown" and gender != "unknown":
-                speaker['gender'] = gender
-            break
-    # Add a new speaker if they don’t already exist
-    speakers.append({
-        'name': speaker_name,
-        'gender': gender,
-        'number': number,
-        'pitch factor': random.uniform(0.8,1.3) # pitch modifier unique to a character's voice
-    })
-
-# Function to infer gender based on pronouns in the text
-def infer_gender_from_pronouns(doc):
-    gender = "unknown"
-    for token in doc:
-        if token.pos_ == "PRON":
-            if token.lower_ in {"he", "him", "his"}:
-                return "male"
-            elif token.lower_ in {"she", "her", "hers"}:
-                return "female"
-
-    return gender
-
-# Function to split lines containing both narration and dialogue
-def split_narration_dialogue(line):
-    parts = []
-    in_dialogue = False
-    current_part = []
-
-    for char in line:
-        if char == '"':  # Toggle between dialogue and narration
-            if in_dialogue:
-                parts.append({'type': 'dialogue', 'text': ''.join(current_part).strip()})
-                current_part = []
-            else:
-                if current_part:
-                    parts.append({'type': 'narration', 'text': ''.join(current_part).strip()})
-                current_part = []
-            in_dialogue = not in_dialogue  # Switch between narration/dialogue mode
+    # Adds or updates a speaker's info into the speakers data holder
+    def add_speaker(self, name, gender="unknown", number="singular"):
+        existing = next((s for s in self.speakers if s["name"] == name), None)
+        if existing:
+            if existing["gender"] == "unknown" and gender != "unknown":
+                existing["gender"] = gender
         else:
-            current_part.append(char)
+            self.speakers.append({
+                "name": name,
+                "gender": gender,
+                "number": number,
+                "pitch factor": random.uniform(*PITCH_FACTOR_RANGE)
+            })
 
-    # Add remaining narration if any after the last quote
-    if current_part:
-        parts.append({'type': 'narration', 'text': ''.join(current_part).strip()})
+    # Retrieves data of a speaker in the speakers data holder
+    def get_speaker(self,name):
+        return next((s for s in self.speakers if s["name"] == name), None)
 
+
+# Alternate between two unnamed speakers
+def alternate_speakers_without_person_entities(lines, speaker_manager):
+    unnamed_speakers = ['Unnamed Speaker 1', 'Unnamed Speaker 2']
+    speaker_manager.add_speaker('Unnamed Speaker 1', "unknown", "singular")
+    speaker_manager.add_speaker('Unnamed Speaker 2', "unknown", "singular")
+
+    current_speaker_index = 0  # Tracks which unnamed speaker is currently active
+
+    for line in lines:
+        line = line.strip()  # Remove any extra whitespace around the line
+        current_speaker = unnamed_speakers[current_speaker_index]
+        speaker_manager.superbook.append({'speaker': current_speaker, 'text': line})
+
+        # Switch to the other unnamed speaker
+        current_speaker_index = (current_speaker_index + 1) % 2
+
+
+# Split lines containing both narration and dialogue with regex
+def split_narration_dialogue(line):
+    pattern = r'([^"]*)(?:"([^"]*)")?'
+    matches = re.findall(pattern, line)
+    parts = []
+    for narration, dialogue in matches:
+        if narration.strip():
+            parts.append({'type': 'narration', 'text': narration.strip()})
+        if dialogue.strip():
+            parts.append({'type': 'dialogue', 'text': dialogue.strip()})
     return parts
 
-# Function to detect named speaker in dialogue
-def get_named_speaker(input_text):
-    for ent in input_text.ents:
+# Infer gender based on pronouns in the text
+def infer_gender_from_pronouns(doc):
+    pronoun_map = {
+        "he": "male", "him": "male", "his": "male",
+        "she": "female", "her": "female", "hers": "female",
+        "they": "unknown"
+    }
+    for token in doc:
+        if token.pos_ == "PRON" and token.lower_ in pronoun_map:
+            return pronoun_map[token.lower_]
+    return "unknown"
+
+
+# Detect named speaker in dialogue
+def get_named_speaker(doc):
+    for ent in doc.ents:
         if ent.label_ == "PERSON":
             return ent.text
-    for token in input_text:
+    for token in doc:
         if token.pos_ == "PROPN" and token.dep_ in {"nsubj", "attr"}:
             return token.text
     return None
 
-# Function to detect speaker from narration
-def get_speaker_from_narration(narration_text):
-    doc = nlp(narration_text)
+# Detect speaker from narration
+def get_speaker_from_narration(doc):
     for token in doc:
         if token.lemma_ in ['say', 'ask', 'reply', 'shout', 'continue', 'speak', 'add']:
-            # Find the subject of the speech verb
-            subject = None
             for child in token.children:
-                if child.dep_ == 'nsubj':
-                    if child.ent_type_ == 'PERSON' or child.pos_ in ['PROPN', 'PRON']:
-                        subject = child.text
-                        break
-            if subject:
-                return subject
+                if child.dep_ == 'nsubj' and (child.ent_type_ == 'PERSON' or child.pos_ in ['PROPN', 'PRON']):
+                    return child.text
     return None
 
-# New function to alternate between two unnamed speakers
-def alternate_speakers_without_person_entities(lines):
-    global current_speaker, previous_speaker
+# Passer to guess unknown gender for named speakers
+def guess_genders_for_speakers(speaker_manager):
+    for speaker in speaker_manager.speakers:
+        name = speaker.get('name')
+        if speaker['gender'] == "unknown" and name != "Narrator":
+            try:
+                search_result = speaker_manager.nd.search(name)
+                if search_result:
+                    gender = NameWrapper(search_result).gender.lower()
+                    speaker['gender'] = gender
+            except Exception as e:
+                logging.error(f"Error guessing gender for {name}: {e}")
 
-    unnamed_speakers = ['Unnamed Speaker 1', 'Unnamed Speaker 2']  # Define the two unnamed speakers
-    add_speaker('Unnamed Speaker 1', "unknown", "singular")
-    add_speaker('Unnamed Speaker 2', "unknown", "singular")
-    current_speaker_index = 0  # Track which unnamed speaker is currently active
 
-    for line in lines:
-        line = line.strip()  # Remove any extra whitespace around the line
-
-        # Alternate between the unnamed speakers
-        current_speaker = unnamed_speakers[current_speaker_index]
-        superbook.append({'speaker': current_speaker, 'text': line})
-
-        # Switch the speaker for the next line
-        current_speaker_index = (current_speaker_index + 1) % 2
-
-# Function to process text line-by-line with improved speaker attribution
-def process_by_lines(lines):
-    global current_speaker, previous_speaker
-    last_speaker = None  # Keep track of the last speaker
-    potential_speakers = []  # List of recent speakers
+# Process text line-by-line with improved speaker attribution
+def process_text_lines(lines, speaker_manager):
+    current_speaker = "Narrator"
 
     # Check if there are any PERSON entities in the text
     text_has_person_entities = any(
@@ -142,7 +139,7 @@ def process_by_lines(lines):
 
     if not text_has_person_entities:
         # If no PERSON entities are found, alternate between unnamed speakers
-        alternate_speakers_without_person_entities(lines)
+        alternate_speakers_without_person_entities(lines, speaker_manager)
         return
 
     for line in lines:
@@ -158,166 +155,125 @@ def process_by_lines(lines):
             if part['type'] == 'dialogue':
                 if named_speaker:
                     current_speaker = named_speaker
-                    add_speaker(current_speaker, gender=gender)
-                    if current_speaker not in potential_speakers:
-                        potential_speakers.append(current_speaker)
-                else:
-                    if len(potential_speakers) >= 2:
-                        # Alternate between the two most recent speakers
-                        idx = potential_speakers.index(previous_speaker) if previous_speaker in potential_speakers else -1
-                        current_speaker = potential_speakers[(idx + 1) % 2]
-                    elif previous_speaker:
-                        current_speaker = previous_speaker
-                    else:
-                        current_speaker = "Unknown Speaker"
-
-                superbook.append({'speaker': current_speaker, 'text': part['text']})
-                previous_speaker = current_speaker
+                    speaker_manager.add_speaker(current_speaker, gender)
+                speaker_manager.superbook.append({"speaker": current_speaker, 'text': part['text']})
             else:
-                # Handle narration
-                speaker_in_narration = get_speaker_from_narration(part['text'])
-                if speaker_in_narration:
-                    narration_gender = infer_gender_from_pronouns(nlp(part['text']))
-                    add_speaker(speaker_in_narration, gender=narration_gender)
-                    superbook.append({'speaker': 'Narrator', 'text': part['text']})
-                    previous_speaker = speaker_in_narration
-                    if speaker_in_narration not in potential_speakers:
-                        potential_speakers.append(speaker_in_narration)
-                else:
-                    superbook.append({'speaker': 'Narrator', 'text': part['text']})
+                narrator_speaker = get_speaker_from_narration(nlp(part['text']))
+                speaker_manager.superbook.append({'speaker': 'Narrator', 'text': part['text']})
+                if narrator_speaker:
+                    speaker_manager.add_speaker(narrator_speaker)
 
 
-# Passer to guess unknown gender for named speakers
-def guess_genders_for_speakers(speakers):
-    for speaker in speakers:
-        name = speaker.get('name')
-        if name != "Narrator":
-            search_result = nd.search(name)
-            if search_result:
-                gender = NameWrapper(search_result).gender.lower()
-                add_speaker(name, gender=gender, number=speaker.get('number'))
 
-# This will build the audiobook  file from the text and tts model of each character
-def audio_superbook():
-    c = 0
-    total_files = len(superbook)
-    num_digits = len(str(total_files))
+# This will build the audiobook  file from the text and tts model of each character with multithreading
+def generate_audio_with_pydub(speaker_manager):
+    def process_entry(index, entry, num_digits):
+        try:
+            speaker_name = entry['speaker']
+            text = entry['text']
+            speaker_data = speaker_manager.get_speaker(speaker_name)
 
-    for entry in superbook:
-        c += 1
-        speaker_name = entry['speaker']
-        text = entry['text']
+            if not speaker_data:
+                logging.warning(f"No speaker data found for {speaker_name}, skipping.")
+                return
 
-        tts_model = (
-            female_tts_model if any(s['name'] == speaker_name and s['gender'] == "female" for s in speakers)
-            else male_tts_model
-        )
+            # Generate audio file using TTS
+            tts_model = (
+                female_tts_model if speaker_data['gender'] == "female" else male_tts_model
+            )
+            temp_audio_path = f"audio/temp_{index}.wav"
+            output_audio_path = f"audio/{str(index).zfill(num_digits)}_{speaker_name}.wav"
 
-        speaker_data = next((s for s in speakers if s['name'] == speaker_name), None)
+            tts_model.tts_to_file(text=text, file_path=temp_audio_path)
 
-        if speaker_data:
-            file_path = f"audio/{str(c).zfill(num_digits)}_{speaker_name}.wav"
-            tts_model.tts_to_file(text=text, file_path=file_path)
+            # Apply pitch shift with pydub
+            apply_pitch_shift(temp_audio_path, speaker_data['pitch factor'], output_audio_path)
 
-            # Wait until the file is fully written
-            while not (os.path.exists(file_path) and os.path.getsize(file_path) > 0):
-                # Check every 50 milliseconds
-                time.sleep(0.05)
+            # Clean up temporary audio file
+            if os.path.exists(temp_audio_path):
+                os.remove(temp_audio_path)
+        except Exception as e:
+            logging.error(f"Error processing audio for entry {index}: {e}")
 
-            audio_data, sr = librosa.load(file_path, sr=None)
-            shifted_audio = pitch_shift(audio_data, sr, speaker_data['pitch factor'])
-            sf.write(file_path, shifted_audio, sr)
-        else:
-            print(f"No voice model found for {speaker_name}, skipping.")
+    total_entries = len(speaker_manager.superbook)
+    num_digits = len(str(total_entries))
+    with ThreadPoolExecutor() as executor:
+        for index, entry in enumerate(speaker_manager.superbook, 1):
+            executor.submit(process_entry, index, entry, num_digits)
 
-# Function that modifies a character's line by their unique pitch factor to have a distinct voice
-def pitch_shift(input_file, sr, factor):
 
-    new_sr = int(sr * factor)
-
-    shifted_audio = librosa.resample(input_file, orig_sr=sr, target_sr=new_sr)
-
-    original_length = len(input_file) / sr
-    duration_stretch_factor = len(shifted_audio) / (sr * original_length)
-    stretched_audio = librosa.effects.time_stretch(shifted_audio, rate=duration_stretch_factor)
-
-    return stretched_audio
+# Modifies a character's line by their unique pitch factor to have a distinct voice
+def apply_pitch_shift(audio_path, pitch_factor, output_path):
+    try:
+        audio = AudioSegment.from_file(audio_path)
+        altered_audio = audio._spawn(audio.raw_data, overrides={
+            "frame_rate": int(audio.frame_rate * pitch_factor)
+        }).set_frame_rate(audio.frame_rate)
+        altered_audio.export(output_path, format="wav")
+    except Exception as e:
+        logging.error(f"Error in pitch shifting for {audio_path}: {e}")
 
 # Function that generate a .json file as output for the program instead of printing results in the console
-def save_results_to_jsonlines(filename):
-    # Breaks up filename to have only the file's name and not the extension
-    start = filename.rfind('/') + 1                         # Start after the last "/"
-    end = filename.rfind('.')                               # End at the last "."
-    output_filename = str(filename[start:end]) + ".jsonl"
-
-    with jsonlines.open(output_filename, mode="w") as writer:
-        for speaker in speakers:
-            writer.write({"speakers": speaker})
-        writer.write({})
-        for entry in superbook:
-            writer.write({"superbook": entry})
-
+def save_to_jsonl(speaker_manager, filename):
+    """Saves the results to a JSONL file."""
+    output_file = f"{os.path.splitext(filename)[0]}.jsonl"
+    try:
+        with jsonlines.open(output_file, mode="w") as writer:
+            for speaker in speaker_manager.speakers:
+                writer.write({"speakers": speaker})
+            for entry in speaker_manager.superbook:
+                writer.write({"superbook": entry})
+    except Exception as e:
+        logging.error(f"Error saving results: {e}")
 
 # Driver to process the input file
-if __name__ == "__main__":
-    # End the initial loading timer and wait for user input
+def main():
+    start_load = time.time()
+
+    input_reader = readfile()
+
+    try:
+        input_file = input_reader.getInput()
+        input_reader.checkFile(input_file)
+        if input_file.endswith(".pdf"):
+            text = input_reader.readPDF(input_file)
+        elif input_file.endswith(".epub"):
+            text = input_reader.readEPUB(input_file)
+        elif input_file.endswith(".txt"):
+            text = input_reader.readTXT(input_file)
+        else:
+            raise ValueError("Unsupported file format")
+    except Exception as e:
+        logging.error(f"Error loading input file: {e}")
+        return
+
     end_load = time.time()
 
-    input = readfile()
-
-
-    file = input.getInput() #do something whileloopish to run until valid input
-
-    #start second timer for loading the file to be read
-    start_second_load = time.time()
-
-    input.checkFile(file)  # This needs to actually stop the program
-
-    if file.endswith(".pdf"):
-        text = input.readPDF(file)
-    elif file.endswith(".epub"):
-        text = input.readEPUB(file)
-    elif file.endswith(".txt"):
-        text = input.readTXT(file)
-    else:
-        print("Invalid input")
-        exit()
-
-    # Switch Timers
-    end_second_load = time.time()
-    start_time = time.time()
 
     # Process the text
-    lines = text.strip().split('\n')
+    start_process = time.time()
+    speaker_manager = SpeakerManager()
+    process_text_lines(text.strip().split("\n"), speaker_manager)
+    end_process = time.time()
 
-
-
-    process_by_lines(lines)
-
-    # Initiate Narrator
-    add_speaker('Narrator')
 
     # Query for missing gender for named speakers
-    guess_genders_for_speakers(speakers)
+    guess_genders_for_speakers(speaker_manager)
 
     
-    # Text to Speech
-    audio_superbook()
+    # Generate Audio
+    start_audio = time.time()
+    generate_audio_with_pydub(speaker_manager)
+    end_audio = time.time()
 
     # Output results
-    save_results_to_jsonlines(file)
+    save_to_jsonl(speaker_manager, input_file)
 
-    #Easy indication for completion (placeholder)
-    print("Done!")
+    # Timers and logging
+    logging.info(f"Loading time: {end_load - start_load:.2f} seconds")
+    logging.info(f"Processing time: {end_process - start_process:.2f} seconds")
+    logging.info(f"Audio generation time: {end_audio - start_audio:.2f} seconds")
+    logging.info("Processing complete!")
 
-    # Timer calculations
-    end_time = time.time()
-    elapsed_load = "{:.2f}".format((end_load - start_load) + (end_second_load - start_second_load))
-
-
-    hours, rem = divmod(end_time-start_time, 3600)
-    minutes, seconds = divmod(rem, 60)
-
-    print(f"Elapsed loading time: {elapsed_load} seconds")
-    print(f"Elapsed computation time: " + ("{:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds)))
-
+if __name__ == "__main__":
+    main()
