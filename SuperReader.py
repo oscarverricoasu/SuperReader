@@ -1,12 +1,9 @@
 import spacy
 from TTS.api import TTS
-from TTS.server.server import speaker_manager
-
 from ReadFile import readfile
 from names_dataset import NameDataset, NameWrapper
 import jsonlines
 import random
-import soundfile as sf
 import time
 import os
 import re
