@@ -17,8 +17,13 @@ logging.basicConfig(level=logging.INFO)
 
 # Load SpaCy Model and TTS stuff
 nlp = spacy.load("en_core_web_sm")
-male_tts_model   = TTS(model_name="tts_models/en/ljspeech/tacotron2-DCA", gpu=False)
-female_tts_model = TTS(model_name="tts_models/en/ljspeech/tacotron2-DCA", gpu=False)
+try:
+    print("Loading TTS model...")
+    male_tts_model = TTS(model_name="tts_models/en/ljspeech/tacotron2-DDC", gpu=False)
+    female_tts_model = male_tts_model
+    print("Model loaded successfully!")
+except Exception as e:
+    print(f"Error loading TTS model: {e}")
 PITCH_FACTOR_RANGE = (0.8, 1.3)
 
 # This will be the main encapsulation for speakers and the superbook structures
