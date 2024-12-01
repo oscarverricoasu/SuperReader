@@ -31,7 +31,7 @@ class SpeakerManager:
     # Initializer of data holders
     def __init__(self):
         self.speakers = [
-            {'name': 'Narrator', 'gender': 'unknown', 'number': 'singular', 'pitch_factor': 1}  # <<< FIXED TYPO
+            {'name': 'Narrator', 'gender': 'unknown', 'number': 'singular', 'pitch_factor': 1}
         ]
         self.superbook = []
         self.nd = NameDataset()  # Dataset to guess gender of names that are unknown
@@ -47,12 +47,119 @@ class SpeakerManager:
                 "name": name,
                 "gender": gender,
                 "number": number,
-                "pitch_factor": random.uniform(*PITCH_FACTOR_RANGE)  # <<< FIXED TYPO
+                "pitch_factor": random.uniform(*PITCH_FACTOR_RANGE)
             })
 
     # Retrieves data of a speaker in the speakers data holder
     def get_speaker(self, name):
         return next((s for s in self.speakers if s["name"] == name), None)
+
+# Split lines containing both narration and dialogue with regex
+def split_narration_dialogue(line):
+    pattern = r'([^"]*)(?:"([^"]*)")?'
+    matches = re.findall(pattern, line)
+    parts = []
+    for narration, dialogue in matches:
+        if narration.strip():
+            parts.append({'type': 'narration', 'text': narration.strip()})
+        if dialogue.strip():
+            parts.append({'type': 'dialogue', 'text': dialogue.strip()})
+    return parts
+
+# Infer gender based on pronouns in the text
+def infer_gender_from_pronouns(doc):
+    pronoun_map = {
+        "he": "male", "him": "male", "his": "male",
+        "she": "female", "her": "female", "hers": "female",
+        "they": "unknown"
+    }
+    for token in doc:
+        if token.pos_ == "PRON" and token.lower_ in pronoun_map:
+            return pronoun_map[token.lower_]
+    return "unknown"
+
+# Detect named speaker in dialogue
+def get_named_speaker(doc):
+    for ent in doc.ents:
+        if ent.label_ == "PERSON":
+            return ent.text
+    for token in doc:
+        if token.pos_ == "PROPN" and token.dep_ in {"nsubj", "attr"}:
+            return token.text
+    return None
+
+# Detect speaker from narration
+def get_speaker_from_narration(doc):
+    for token in doc:
+        if token.lemma_ in ['say', 'ask', 'reply', 'shout', 'continue', 'speak', 'add']:
+            for child in token.children:
+                if child.dep_ == 'nsubj' and (child.ent_type_ == 'PERSON' or child.pos_ in ['PROPN', 'PRON']):
+                    return child.text
+    return None
+
+# Alternate between two unnamed speakers
+def alternate_speakers_without_person_entities(lines, speaker_manager):
+    unnamed_speakers = ['Unnamed Speaker 1', 'Unnamed Speaker 2']
+    speaker_manager.add_speaker('Unnamed Speaker 1', "unknown", "singular")
+    speaker_manager.add_speaker('Unnamed Speaker 2', "unknown", "singular")
+
+    current_speaker_index = 0  # Tracks which unnamed speaker is currently active
+
+    for line in lines:
+        line = line.strip()  # Remove any extra whitespace around the line
+        current_speaker = unnamed_speakers[current_speaker_index]
+        speaker_manager.superbook.append({'speaker': current_speaker, 'text': line})
+
+        # Switch to the other unnamed speaker
+        current_speaker_index = (current_speaker_index + 1) % 2
+
+# Process text line-by-line with improved speaker attribution
+def process_text_lines(lines, speaker_manager):
+    current_speaker = "Narrator"
+
+    # Check if there are any PERSON entities in the text
+    text_has_person_entities = any(
+        ent.label_ == "PERSON" for line in lines for ent in nlp(line).ents
+    )
+
+    if not text_has_person_entities:
+        # If no PERSON entities are found, alternate between unnamed speakers
+        alternate_speakers_without_person_entities(lines, speaker_manager)
+        return
+
+    for line in lines:
+        line_doc = nlp(line)
+        named_speaker = get_named_speaker(line_doc)
+        gender = infer_gender_from_pronouns(line_doc) if named_speaker else "unknown"
+
+        # Split the line into narration and dialogue
+        line_parts = split_narration_dialogue(line)
+
+        # Process each part
+        for part in line_parts:
+            if part['type'] == 'dialogue':
+                if named_speaker:
+                    current_speaker = named_speaker
+                    speaker_manager.add_speaker(current_speaker, gender)
+                speaker_manager.superbook.append({"speaker": current_speaker, 'text': part['text']})
+            else:
+                narrator_speaker = get_speaker_from_narration(nlp(part['text']))
+                speaker_manager.superbook.append({'speaker': 'Narrator', 'text': part['text']})
+                if narrator_speaker:
+                    speaker_manager.add_speaker(narrator_speaker)
+
+# Guess unknown gender for named speakers
+def guess_genders_for_speakers(speaker_manager):
+    for speaker in speaker_manager.speakers:
+        name = speaker.get('name')
+        if speaker['gender'] == "unknown" and name != "Narrator":
+            try:
+                search_result = speaker_manager.nd.search(name)
+                if search_result:
+                    gender = NameWrapper(search_result).gender.lower()
+                    speaker['gender'] = gender
+            except Exception as e:
+                logging.error(f"Error guessing gender for {name}: {e}")
 
 # Generate audiobook files with multithreading
 def generate_audio_with_pydub(speaker_manager):
@@ -109,7 +216,7 @@ def apply_pitch_shift(audio_path, pitch_factor, output_path):
     except Exception as e:
         logging.error(f"Error in pitch shifting for {audio_path}: {e}")
 
-# Function to generate a .json file as output for the program instead of printing results in the console
+# Function that generate a .json file as output for the program instead of printing results in the console
 def save_to_jsonl(speaker_manager, filename):
     """Saves the results to a JSONL file."""
     output_file = f"{os.path.splitext(filename)[0]}.jsonl"
@@ -156,7 +263,7 @@ def main():
     # Process the text
     start_process = time.time()
     speaker_manager = SpeakerManager()
-    lines = text.strip().split("\n")  # Split the text into lines only once # <<< CHANGED LINE
+    lines = text.strip().split("\n")
     process_text_lines(lines, speaker_manager)
     end_process = time.time()
 
@@ -179,110 +286,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# Function to process text lines with improved speaker attribution
-def process_text_lines(lines, speaker_manager):
-    current_speaker = "Narrator"
-
-    # Check if there are any PERSON entities in the text
-    text_has_person_entities = any(
-        ent.label_ == "PERSON" for line in lines for ent in nlp(line).ents
-    )
-
-    if not text_has_person_entities:
-        # If no PERSON entities are found, alternate between unnamed speakers
-        alternate_speakers_without_person_entities(lines, speaker_manager)
-        return
-
-    for line in lines:
-        line_doc = nlp(line)
-        named_speaker = get_named_speaker(line_doc)
-        gender = infer_gender_from_pronouns(line_doc) if named_speaker else "unknown"
-
-        # Split the line into narration and dialogue
-        line_parts = split_narration_dialogue(line)
-
-        # Process each part
-        for part in line_parts:
-            if part['type'] == 'dialogue':
-                if named_speaker:
-                    current_speaker = named_speaker
-                    speaker_manager.add_speaker(current_speaker, gender)
-                speaker_manager.superbook.append({"speaker": current_speaker, 'text': part['text']})
-            else:
-                narrator_speaker = get_speaker_from_narration(nlp(part['text']))
-                speaker_manager.superbook.append({'speaker': 'Narrator', 'text': part['text']})
-                if narrator_speaker:
-                    speaker_manager.add_speaker(narrator_speaker)
-
-# Alternate between two unnamed speakers
-def alternate_speakers_without_person_entities(lines, speaker_manager):
-    unnamed_speakers = ['Unnamed Speaker 1', 'Unnamed Speaker 2']
-    speaker_manager.add_speaker('Unnamed Speaker 1', "unknown", "singular")
-    speaker_manager.add_speaker('Unnamed Speaker 2', "unknown", "singular")
-
-    current_speaker_index = 0  # Tracks which unnamed speaker is currently active
-
-    for line in lines:
-        line = line.strip()  # Remove any extra whitespace around the line
-        current_speaker = unnamed_speakers[current_speaker_index]
-        speaker_manager.superbook.append({'speaker': current_speaker, 'text': line})
-
-        # Switch to the other unnamed speaker
-        current_speaker_index = (current_speaker_index + 1) % 2
-
-# Split lines containing both narration and dialogue with regex
-def split_narration_dialogue(line):
-    pattern = r'([^"]*)(?:"([^"]*)")?'
-    matches = re.findall(pattern, line)
-    parts = []
-    for narration, dialogue in matches:
-        if narration.strip():
-            parts.append({'type': 'narration', 'text': narration.strip()})
-        if dialogue.strip():
-            parts.append({'type': 'dialogue', 'text': dialogue.strip()})
-    return parts
-
-# Infer gender based on pronouns in the text
-def infer_gender_from_pronouns(doc):
-    pronoun_map = {
-        "he": "male", "him": "male", "his": "male",
-        "she": "female", "her": "female", "hers": "female",
-        "they": "unknown"
-    }
-    for token in doc:
-        if token.pos_ == "PRON" and token.lower_ in pronoun_map:
-            return pronoun_map[token.lower_]
-    return "unknown"
-
-# Detect named speaker in dialogue
-def get_named_speaker(doc):
-    for ent in doc.ents:
-        if ent.label_ == "PERSON":
-            return ent.text
-    for token in doc:
-        if token.pos_ == "PROPN" and token.dep_ in {"nsubj", "attr"}:
-            return token.text
-    return None
-
-# Detect speaker from narration
-def get_speaker_from_narration(doc):
-    for token in doc:
-        if token.lemma_ in ['say', 'ask', 'reply', 'shout', 'continue', 'speak', 'add']:
-            for child in token.children:
-                if child.dep_ == 'nsubj' and (child.ent_type_ == 'PERSON' or child.pos_ in ['PROPN', 'PRON']):
-                    return child.text
-    return None
-
-# Guess unknown gender for named speakers
-def guess_genders_for_speakers(speaker_manager):
-    for speaker in speaker_manager.speakers:
-        name = speaker.get('name')
-        if speaker['gender'] == "unknown" and name != "Narrator":
-            try:
-                search_result = speaker_manager.nd.search(name)
-                if search_result:
-                    gender = NameWrapper(search_result).gender.lower()
-                    speaker['gender'] = gender
-            except Exception as e:
-                logging.error(f"Error guessing gender for {name}: {e}")
