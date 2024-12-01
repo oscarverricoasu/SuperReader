@@ -200,6 +200,7 @@ def apply_pitch_shift(audio_path, pitch_factor, output_path):
     try:
         audio = AudioSegment.from_file(audio_path)
 
+        # Apply pitch shift by changing frame rate
         if pitch_factor != 1:
             altered_audio = audio._spawn(audio.raw_data, overrides={
                 "frame_rate": int(audio.frame_rate * pitch_factor)
@@ -207,10 +208,20 @@ def apply_pitch_shift(audio_path, pitch_factor, output_path):
         else:
             altered_audio = audio
 
-        # Ensure the output audio is normalized in length to avoid mismatches
-        fixed_length_audio = altered_audio.set_duration(audio.duration_seconds)
+        # Define a consistent length for audio segments (in milliseconds)
+        target_length = 3000  # Set a target length of 3 seconds, for example
 
-        fixed_length_audio.export(output_path, format="wav")
+        # Pad or trim the altered audio to ensure consistent length
+        if len(altered_audio) < target_length:
+            # Pad with silence if shorter than target length
+            padding = AudioSegment.silent(duration=(target_length - len(altered_audio)))
+            altered_audio = altered_audio + padding
+        elif len(altered_audio) > target_length:
+            # Trim the audio if longer than target length
+            altered_audio = altered_audio[:target_length]
+
+        # Export the altered audio
+        altered_audio.export(output_path, format="wav")
         print(f"Audio exported with pitch factor: {pitch_factor} to '{output_path}'")
 
     except Exception as e:
