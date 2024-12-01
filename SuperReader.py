@@ -11,6 +11,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 import librosa
 import soundfile as sf
+from pydub import AudioSegment
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -26,6 +27,7 @@ except Exception as e:
 
 PITCH_FACTOR_RANGE = (0.8, 1.3)
 MIN_AUDIO_DURATION = 0.5  # Minimum duration (in seconds) for an audio file to be processed for pitch shifting
+DELAY_BETWEEN_LINES_MS = 300  # Delay between lines in milliseconds
 
 
 # This will be the main encapsulation for speakers and the superbook structures
@@ -221,6 +223,46 @@ def generate_audio_with_librosa_multithreading(speaker_manager):
             executor.submit(process_entry, index, entry, num_digits)
 
 
+# Generate audiobook files without multithreading using librosa pitch shifting
+def generate_audio_with_librosa_single_thread(speaker_manager):
+    total_entries = len(speaker_manager.superbook)
+    num_digits = len(str(total_entries))
+
+    for index, entry in enumerate(speaker_manager.superbook, 1):
+        try:
+            speaker_name = entry['speaker']
+            text = entry['text']
+            speaker_data = speaker_manager.get_speaker(speaker_name)
+
+            if not speaker_data:
+                logging.warning(f"No speaker data found for {speaker_name}, skipping.")
+                continue
+
+            # Generate audio using TTS model
+            temp_audio_path = f"audio/temp_{index}.wav"
+            output_audio_path = f"audio/{str(index).zfill(num_digits)}_{speaker_name}.wav"
+
+            tts_model.tts_to_file(text=text, file_path=temp_audio_path)
+
+            # Check audio duration
+            y, sr = librosa.load(temp_audio_path, sr=None)
+            duration = librosa.get_duration(y=y, sr=sr)
+            if duration < MIN_AUDIO_DURATION:
+                logging.warning(f"Audio for entry {index} is too short for pitch shifting. Skipping.")
+                sf.write(output_audio_path, y, sr)
+                continue
+
+            # Apply pitch shift with librosa
+            apply_pitch_shift_librosa(y, sr, speaker_data['pitch_factor'], output_audio_path)
+
+            # Clean up temporary audio file
+            if os.path.exists(temp_audio_path):
+                os.remove(temp_audio_path)
+
+        except Exception as e:
+            logging.error(f"Error processing audio for entry {index}: {e}")
+
+
 # Apply pitch shift with librosa
 def apply_pitch_shift_librosa(y, sr, pitch_factor, output_path):
     try:
@@ -251,49 +293,16 @@ def clear_audio_directory(directory):
             logging.error(f"Error deleting file {file_path}: {e}")
 
 
-# Generate audiobook files without multithreading
-def generate_audio_with_librosa_single_thread(speaker_manager):
-    total_entries = len(speaker_manager.superbook)
-    num_digits = len(str(total_entries))
-
-    for index, entry in enumerate(speaker_manager.superbook, 1):
-        process_entry(index, entry, num_digits, speaker_manager)
-
-
-# Process each entry in the Superbook (used in single-thread processing)
-def process_entry(index, entry, num_digits, speaker_manager):
-    try:
-        speaker_name = entry['speaker']
-        text = entry['text']
-        speaker_data = speaker_manager.get_speaker(speaker_name)
-
-        if not speaker_data:
-            logging.warning(f"No speaker data found for {speaker_name}, skipping.")
-            return
-
-        # Generate audio using TTS model
-        temp_audio_path = f"audio/temp_{index}.wav"
-        output_audio_path = f"audio/{str(index).zfill(num_digits)}_{speaker_name}.wav"
-
-        tts_model.tts_to_file(text=text, file_path=temp_audio_path)
-
-        # Check audio duration
-        y, sr = librosa.load(temp_audio_path, sr=None)
-        duration = librosa.get_duration(y=y, sr=sr)
-        if duration < MIN_AUDIO_DURATION:
-            logging.warning(f"Audio for entry {index} is too short for pitch shifting. Skipping.")
-            sf.write(output_audio_path, y, sr)
-            return
-
-        # Apply pitch shift with librosa
-        apply_pitch_shift_librosa(y, sr, speaker_data['pitch_factor'], output_audio_path)
-
-        # Clean up temporary audio file
-        if os.path.exists(temp_audio_path):
-            os.remove(temp_audio_path)
-
-    except Exception as e:
-        logging.error(f"Error processing audio for entry {index}: {e}")
+# Combine all audio files in the audio directory into a single audio file
+def combine_audio_files(directory, output_filename):
+    combined = AudioSegment.silent(duration=0)
+    for filename in sorted(os.listdir(directory)):
+        if filename.endswith(".wav"):
+            file_path = os.path.join(directory, filename)
+            audio_segment = AudioSegment.from_wav(file_path)
+            combined += audio_segment + AudioSegment.silent(duration=DELAY_BETWEEN_LINES_MS)
+    combined.export(output_filename, format="wav")
+    print(f"Combined audio file saved as '{output_filename}'")
 
 
 # Function that generate a .json file as output for the program instead of printing results in the console
@@ -363,6 +372,10 @@ def main():
     else:
         generate_audio_with_librosa_single_thread(speaker_manager)
     end_audio = time.time()
+
+    # Combine all audio files into a single file
+    combined_audio_filename = f"{os.path.splitext(input_file)[0]}.wav"
+    combine_audio_files(audio_directory, combined_audio_filename)
 
     # Output results
     save_to_jsonl(speaker_manager, input_file)
