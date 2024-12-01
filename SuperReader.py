@@ -19,11 +19,11 @@ logging.basicConfig(level=logging.INFO)
 nlp = spacy.load("en_core_web_sm")
 try:
     print("Loading TTS model...")
-    male_tts_model = TTS(model_name="tts_models/en/ljspeech/tacotron2-DDC", gpu=False)
-    female_tts_model = male_tts_model
+    tts_model = TTS(model_name="tts_models/en/ljspeech/tacotron2-DDC", gpu=False)
     print("Models loaded successfully!")
 except Exception as e:
     print(f"Error loading TTS model: {e}")
+
 PITCH_FACTOR_RANGE = (0.8, 1.3)
 
 # This will be the main encapsulation for speakers and the superbook structures
@@ -182,9 +182,7 @@ def generate_audio_with_pydub(speaker_manager):
                 return
 
             # Generate audio file using TTS
-            tts_model = (
-                female_tts_model if speaker_data['gender'] == "female" else male_tts_model
-            )
+
             temp_audio_path = f"audio/temp_{index}.wav"
             output_audio_path = f"audio/{str(index).zfill(num_digits)}_{speaker_name}.wav"
 
@@ -196,6 +194,7 @@ def generate_audio_with_pydub(speaker_manager):
             # Clean up temporary audio file
             if os.path.exists(temp_audio_path):
                 os.remove(temp_audio_path)
+
         except Exception as e:
             logging.error(f"Error processing audio for entry {index}: {e}")
 
@@ -210,10 +209,17 @@ def generate_audio_with_pydub(speaker_manager):
 def apply_pitch_shift(audio_path, pitch_factor, output_path):
     try:
         audio = AudioSegment.from_file(audio_path)
-        altered_audio = audio._spawn(audio.raw_data, overrides={
-            "frame_rate": int(audio.frame_rate * pitch_factor)
-        }).set_frame_rate(audio.frame_rate)
-        altered_audio.export(output_path, format="wav")
+
+        if pitch_factor != 1:
+            altered_audio = audio._spawn(audio.raw_data, overrides={
+                "frame_rate": int(audio.frame_rate * pitch_factor)
+            }).set_frame_rate(audio.frame_rate)
+        else:
+            altered_audio = audio
+
+        altered_audio.export(output_path, format="wav")  # <<< CHANGED LINE
+        print(f"Audio exported with pitch factor: {pitch_factor} to '{output_path}'")
+
     except Exception as e:
         logging.error(f"Error in pitch shifting for {audio_path}: {e}")
 
@@ -265,7 +271,8 @@ def main():
     # Process the text
     start_process = time.time()
     speaker_manager = SpeakerManager()
-    process_text_lines(text.strip().split("\n"), speaker_manager)
+    lines = text.strip().split("\n")
+    process_text_lines(lines, speaker_manager)
     end_process = time.time()
 
 
