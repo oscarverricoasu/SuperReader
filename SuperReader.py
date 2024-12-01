@@ -27,7 +27,7 @@ except Exception as e:
 
 PITCH_FACTOR_RANGE = (0.8, 1.3)
 MIN_AUDIO_DURATION = 0.5  # Minimum duration (in seconds) for an audio file to be processed for pitch shifting
-DELAY_BETWEEN_LINES_MS = 300  # Delay between lines in milliseconds
+DELAY_BETWEEN_LINES_MS = 100  # Delay between lines in milliseconds
 
 
 # This will be the main encapsulation for speakers and the superbook structures
@@ -263,46 +263,51 @@ def generate_audio_with_librosa_single_thread(speaker_manager):
             logging.error(f"Error processing audio for entry {index}: {e}")
 
 
-# Apply pitch shift with librosa
+# Modifies a character's line by their unique pitch factor to have a distinct voice using librosa
 def apply_pitch_shift_librosa(y, sr, pitch_factor, output_path):
     try:
-        # Apply pitch shift if pitch_factor is different from 1
-        if pitch_factor != 1:
-            n_steps = (pitch_factor - 1) * 12  # Convert pitch factor to semitones
-            y_shifted = librosa.effects.pitch_shift(y, sr=sr, n_steps=n_steps)
-        else:
-            y_shifted = y
-
-        # Write the output audio
+        y_shifted = librosa.effects.pitch_shift(y, sr, n_steps=pitch_factor)
         sf.write(output_path, y_shifted, sr)
         print(f"Audio exported with pitch factor: {pitch_factor} to '{output_path}'")
+    except Exception as e:
+        logging.error(f"Error in pitch shifting for {output_path}: {e}")
+
+
+# Combine all audio files in the audio directory into a single audio file with a slight delay between lines
+def combine_audio_files(directory, output_filename):
+    try:
+        audio_files = sorted([f for f in os.listdir(directory) if f.endswith(".wav")])
+
+        if not audio_files:
+            logging.error("No audio files found to combine.")
+            return
+
+        # Initialize with the first file and create a 100ms silent gap for spacing
+        combined = AudioSegment.from_wav(os.path.join(directory, audio_files[0]))
+        silent_gap = AudioSegment.silent(duration=DELAY_BETWEEN_LINES_MS)
+
+        # Loop through all audio files and combine them with a gap
+        for audio_file in audio_files[1:]:
+            file_path = os.path.join(directory, audio_file)
+            file_audio = AudioSegment.from_wav(file_path)
+            combined += silent_gap + file_audio
+
+        # Export the final combined audio
+        combined.export(output_filename, format="wav")
+        print(f"Combined audio file saved as '{output_filename}'")
+        logging.info(f"Combined audio file saved as '{output_filename}'")
 
     except Exception as e:
-        logging.error(f"Error in pitch shifting for audio: {e}")
+        logging.error(f"Error combining audio files: {e}")
 
 
-# Clear all files in the audio directory
+# Clear the audio directory
 def clear_audio_directory(directory):
-    for filename in os.listdir(directory):
-        file_path = os.path.join(directory, filename)
-        try:
-            if os.path.isfile(file_path):
-                os.remove(file_path)
-                print(f"Deleted file: {file_path}")
-        except Exception as e:
-            logging.error(f"Error deleting file {file_path}: {e}")
-
-
-# Combine all audio files in the audio directory into a single audio file
-def combine_audio_files(directory, output_filename):
-    combined = AudioSegment.silent(duration=0)
-    for filename in sorted(os.listdir(directory)):
-        if filename.endswith(".wav"):
-            file_path = os.path.join(directory, filename)
-            audio_segment = AudioSegment.from_wav(file_path)
-            combined += audio_segment + AudioSegment.silent(duration=DELAY_BETWEEN_LINES_MS)
-    combined.export(output_filename, format="wav")
-    print(f"Combined audio file saved as '{output_filename}'")
+    for file in os.listdir(directory):
+        file_path = os.path.join(directory, file)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+            print(f"Deleted file: {file_path}")
 
 
 # Function that generate a .json file as output for the program instead of printing results in the console
