@@ -266,19 +266,26 @@ def generate_audio_with_librosa_single_thread(speaker_manager):
 # Apply pitch shift with librosa
 def apply_pitch_shift_librosa(y, sr, pitch_factor, output_path):
     try:
-        # Apply pitch shift if pitch_factor is different from 1
-        if pitch_factor != 1:
-            n_steps = (pitch_factor - 1) * 12  # Convert pitch factor to semitones
-            y_shifted = librosa.effects.pitch_shift(y, sr=sr, n_steps=n_steps)
-        else:
-            y_shifted = y
+        # Calculate the new sample rate for pitch shifting
+        new_sr = int(sr * pitch_factor)
 
-        # Write the output audio
-        sf.write(output_path, y_shifted, sr)
+        # Resample the audio to the new sample rate
+        shifted_audio = librosa.resample(y, orig_sr=sr, target_sr=new_sr)
+
+        # Calculate the duration stretch factor to maintain original duration
+        original_length = len(y) / sr
+        duration_stretch_factor = len(shifted_audio) / (sr * original_length)
+
+        # Time stretch the audio to match the original duration
+        stretched_audio = librosa.effects.time_stretch(shifted_audio, rate=duration_stretch_factor)
+
+        # Save the output audio file
+        sf.write(output_path, stretched_audio, sr)
         print(f"Audio exported with pitch factor: {pitch_factor} to '{output_path}'")
 
     except Exception as e:
         logging.error(f"Error in pitch shifting for audio: {e}")
+
 
 
 # Clear all files in the audio directory
