@@ -113,12 +113,11 @@ def apply_pitch_shift_librosa(audio_path, pitch_factor, output_path):
             y_shifted = librosa.effects.pitch_shift(y, sr=sr, n_steps=n_steps)
 
             # Ensure the output has the same length as the input to avoid mismatch issues
-            if len(y_shifted) != len(y):
-                y_shifted = librosa.util.fix_length(y_shifted, len(y))
+            y_shifted = librosa.util.fix_length(y_shifted, len(y))
         else:
             y_shifted = y
 
-        # Export the altered audio
+        # Write the output audio
         sf.write(output_path, y_shifted, sr)
         print(f"Audio exported with pitch factor: {pitch_factor} to '{output_path}'")
 
