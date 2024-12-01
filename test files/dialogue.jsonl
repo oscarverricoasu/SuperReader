@@ -1,0 +1,20 @@
+{"speakers": {"name": "Narrator", "gender": "unknown", "number": "singular", "pitch_factor": 1}}
+{"speakers": {"name": "Calvin", "gender": "male", "number": "singular", "pitch factor": 0.8390699231665361}}
+{"speakers": {"name": "Charles", "gender": "male", "number": "singular", "pitch factor": 0.9251058715349076}}
+{"speakers": {"name": "Meg", "gender": "female", "number": "singular", "pitch factor": 0.8039476594181832}}
+{"superbook": {"speaker": "Narrator", "text": "Calvin licked his lips."}}
+{"superbook": {"speaker": "Calvin", "text": "Where are we going?"}}
+{"superbook": {"speaker": "Charles", "text": "Up."}}
+{"superbook": {"speaker": "Narrator", "text": "Charles continued his lecture."}}
+{"superbook": {"speaker": "Charles", "text": "On Camazotz we are all happy because we are all alike. Differences create problems. You know that, don't you, dear sister?"}}
+{"superbook": {"speaker": "Meg", "text": "No,"}}
+{"superbook": {"speaker": "Narrator", "text": "Meg said."}}
+{"superbook": {"speaker": "Narrator", "text": "Oh, yes, you do. You've seen at home how true it is. You know that you're not happy at school. Because you're different.”"}}
+{"superbook": {"speaker": "Calvin", "text": "I'm different, and I'm happy,"}}
+{"superbook": {"speaker": "Narrator", "text": "Calvin said."}}
+{"superbook": {"speaker": "Calvin", "text": "But you pretend that you aren't different."}}
+{"superbook": {"speaker": "Calvin", "text": "I'm different, and I like being different."}}
+{"superbook": {"speaker": "Narrator", "text": "Calvin's voice was unnaturally loud."}}
+{"superbook": {"speaker": "Meg", "text": "Maybe I don't like being different,"}}
+{"superbook": {"speaker": "Narrator", "text": "Meg said,"}}
+{"superbook": {"speaker": "Meg", "text": "but I don't want to be like everybody else, either."}}

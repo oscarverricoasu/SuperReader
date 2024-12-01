@@ -21,7 +21,7 @@ try:
     print("Loading TTS model...")
     male_tts_model = TTS(model_name="tts_models/en/ljspeech/tacotron2-DDC", gpu=False)
     female_tts_model = male_tts_model
-    print("Model loaded successfully!")
+    print("Models loaded successfully!")
 except Exception as e:
     print(f"Error loading TTS model: {e}")
 PITCH_FACTOR_RANGE = (0.8, 1.3)
@@ -31,7 +31,9 @@ class SpeakerManager:
 
     # Initializer of data holders
     def __init__(self):
-        self.speakers  = []
+        self.speakers  = [
+        {'name': 'Narrator', 'gender': 'unknown', 'number': 'singular', 'pitch_factor': 1}
+        ]
         self.superbook = []
         self.nd = NameDataset()  # Dataset to guess gender of names that are unknown
 
@@ -231,6 +233,14 @@ def save_to_jsonl(speaker_manager, filename):
 # Driver to process the input file
 def main():
     start_load = time.time()
+    
+    # Check if the 'audio' directory exists, if not, create it
+    audio_directory = "./audio"
+    if not os.path.exists(audio_directory):
+        os.makedirs(audio_directory)
+        print(f"Directory '{audio_directory}' created.")
+    else:
+        print(f"Directory '{audio_directory}' already exists.")
 
     input_reader = readfile()
 
