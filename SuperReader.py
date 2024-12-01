@@ -16,7 +16,7 @@ from pydub import AudioSegment
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
 
-# Load SpaCy Model and TTS stuff
+# Load SpaCy Model and TTS model
 nlp = spacy.load("en_core_web_sm")
 try:
     print("Loading TTS model...")
@@ -26,8 +26,7 @@ except Exception as e:
     print(f"Error loading TTS model: {e}")
 
 PITCH_FACTOR_RANGE = (0.8, 1.3)
-MIN_AUDIO_DURATION = 0.5  # Minimum duration (in seconds) for an audio file to be processed for pitch shifting
-DELAY_BETWEEN_LINES_MS = 100  # Delay between lines in milliseconds
+DELAY_BETWEEN_LINES_MS = 100
 
 
 # This will be the main encapsulation for speakers and the superbook structures
@@ -88,11 +87,6 @@ def split_narration_dialogue(line):
         if dialogue.strip():
             parts.append({'type': 'dialogue', 'text': dialogue.strip()})
     return parts
-
-
-# Clean non-standard characters from the text
-def clean_text(text):
-    return re.sub(r'[^\x00-\x7F]+', '', text)
 
 
 # Infer gender based on pronouns in the text
@@ -158,7 +152,6 @@ def process_text_lines(lines, speaker_manager):
         return
 
     for line in lines:
-        line = clean_text(line)  # Clean the line before processing
         line_doc = nlp(line)
         named_speaker = get_named_speaker(line_doc)
         gender = infer_gender_from_pronouns(line_doc) if named_speaker else "unknown"
@@ -180,92 +173,50 @@ def process_text_lines(lines, speaker_manager):
                     speaker_manager.add_speaker(narrator_speaker)
 
 
-# Generate audiobook files with multithreading using librosa pitch shifting
+# Generate audio using librosa with multithreading
 def generate_audio_with_librosa_multithreading(speaker_manager):
-    def process_entry(index, entry, num_digits):
-        try:
-            speaker_name = entry['speaker']
-            text = entry['text']
-            speaker_data = speaker_manager.get_speaker(speaker_name)
-
-            if not speaker_data:
-                logging.warning(f"No speaker data found for {speaker_name}, skipping.")
-                return
-
-            # Generate audio using TTS model
-            temp_audio_path = f"audio/temp_{index}.wav"
-            output_audio_path = f"audio/{str(index).zfill(num_digits)}_{speaker_name}.wav"
-
-            tts_model.tts_to_file(text=text, file_path=temp_audio_path)
-
-            # Check audio duration
-            y, sr = librosa.load(temp_audio_path, sr=None)
-            duration = librosa.get_duration(y=y, sr=sr)
-            if duration < MIN_AUDIO_DURATION:
-                logging.warning(f"Audio for entry {index} is too short for pitch shifting. Skipping.")
-                sf.write(output_audio_path, y, sr)
-                return
-
-            # Apply pitch shift with librosa
-            apply_pitch_shift_librosa(y, sr, speaker_data['pitch_factor'], output_audio_path)
-
-            # Clean up temporary audio file
-            if os.path.exists(temp_audio_path):
-                os.remove(temp_audio_path)
-
-        except Exception as e:
-            logging.error(f"Error processing audio for entry {index}: {e}")
-
-    total_entries = len(speaker_manager.superbook)
-    num_digits = len(str(total_entries))
     with ThreadPoolExecutor() as executor:
         for index, entry in enumerate(speaker_manager.superbook, 1):
-            executor.submit(process_entry, index, entry, num_digits)
+            executor.submit(process_audio_entry, index, entry)
 
 
-# Generate audiobook files without multithreading using librosa pitch shifting
+# Generate audio using librosa without multithreading
 def generate_audio_with_librosa_single_thread(speaker_manager):
-    total_entries = len(speaker_manager.superbook)
-    num_digits = len(str(total_entries))
-
     for index, entry in enumerate(speaker_manager.superbook, 1):
-        try:
-            speaker_name = entry['speaker']
-            text = entry['text']
-            speaker_data = speaker_manager.get_speaker(speaker_name)
-
-            if not speaker_data:
-                logging.warning(f"No speaker data found for {speaker_name}, skipping.")
-                continue
-
-            # Generate audio using TTS model
-            temp_audio_path = f"audio/temp_{index}.wav"
-            output_audio_path = f"audio/{str(index).zfill(num_digits)}_{speaker_name}.wav"
-
-            tts_model.tts_to_file(text=text, file_path=temp_audio_path)
-
-            # Check audio duration
-            y, sr = librosa.load(temp_audio_path, sr=None)
-            duration = librosa.get_duration(y=y, sr=sr)
-            if duration < MIN_AUDIO_DURATION:
-                logging.warning(f"Audio for entry {index} is too short for pitch shifting. Skipping.")
-                sf.write(output_audio_path, y, sr)
-                continue
-
-            # Apply pitch shift with librosa
-            apply_pitch_shift_librosa(y, sr, speaker_data['pitch_factor'], output_audio_path)
-
-            # Clean up temporary audio file
-            if os.path.exists(temp_audio_path):
-                os.remove(temp_audio_path)
-
-        except Exception as e:
-            logging.error(f"Error processing audio for entry {index}: {e}")
+        process_audio_entry(index, entry)
 
 
-# Modifies a character's line by their unique pitch factor to have a distinct voice using librosa
-def apply_pitch_shift_librosa(y, sr, pitch_factor, output_path):
+# Process each audio entry
+def process_audio_entry(index, entry):
     try:
+        speaker_name = entry['speaker']
+        text = entry['text']
+        speaker_data = speaker_manager.get_speaker(speaker_name)
+
+        if not speaker_data:
+            logging.warning(f"No speaker data found for {speaker_name}, skipping.")
+            return
+
+        # Generate audio file using TTS
+        temp_audio_path = f"audio/temp_{index}.wav"
+        output_audio_path = f"audio/{str(index).zfill(2)}_{speaker_name}.wav"
+
+        tts_model.tts_to_file(text=text, file_path=temp_audio_path)
+
+        # Apply pitch shift with librosa
+        apply_pitch_shift(temp_audio_path, speaker_data['pitch_factor'], output_audio_path)
+
+        # Clean up temporary audio file
+        if os.path.exists(temp_audio_path):
+            os.remove(temp_audio_path)
+    except Exception as e:
+        logging.error(f"Error processing audio for entry {index}: {e}")
+
+
+# Modifies a character's line by their unique pitch factor to have a distinct voice
+def apply_pitch_shift(audio_path, pitch_factor, output_path):
+    try:
+        y, sr = librosa.load(audio_path, sr=None)
         y_shifted = librosa.effects.pitch_shift(y, sr, n_steps=pitch_factor)
         sf.write(output_path, y_shifted, sr)
         print(f"Audio exported with pitch factor: {pitch_factor} to '{output_path}'")
