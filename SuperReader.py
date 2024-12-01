@@ -153,8 +153,7 @@ def detect_attribution(text):
 
 # Process text line-by-line with improved speaker attribution
 def process_text_lines(lines, speaker_manager):
-    current_speaker = "Narrator"
-    last_quoted_speaker = None  # Tracks the last speaker for dialogue
+    speaker_history = ["Narrator"]  # Track the history of speakers
 
     for line in lines:
         line = clean_text(line)  # Clean the line before processing
@@ -171,14 +170,14 @@ def process_text_lines(lines, speaker_manager):
                 if named_speaker:
                     # Update the current speaker to the named speaker
                     current_speaker = named_speaker
-                    last_quoted_speaker = current_speaker
                     speaker_manager.add_speaker(current_speaker, gender)
                 else:
-                    # Default to the last quoted speaker for ambiguous dialogue
-                    if last_quoted_speaker:
-                        current_speaker = last_quoted_speaker
+                    # Default to the second-to-last speaker for ambiguous dialogue
+                    if len(speaker_history) >= 2:
+                        current_speaker = speaker_history[-2]
                     else:
-                        current_speaker = "Unnamed Speaker 1"  # Fallback for unnamed speakers
+                        current_speaker = "Unnamed Speaker 1"  # Fallback if history is too short
+                speaker_history.append(current_speaker)
                 speaker_manager.superbook.append({"speaker": current_speaker, "text": part["text"]})
             else:
                 # Handle narration parts
@@ -186,16 +185,13 @@ def process_text_lines(lines, speaker_manager):
                 if attribution:
                     # If attribution is found (e.g., "said Meg"), update the speaker
                     current_speaker = attribution
-                    last_quoted_speaker = current_speaker
                     speaker_manager.add_speaker(current_speaker)
-                    speaker_manager.superbook.append({"speaker": "Narrator", "text": part["text"]})
                 else:
-                    # For narration outside quotes, keep the narrator but check context
-                    if "you" in part["text"].lower() or "your" in part["text"].lower() or "you've" in part["text"].lower():
-                        # Default to the last quoted speaker for "you" pronoun ambiguity
-                        if last_quoted_speaker:
-                            current_speaker = last_quoted_speaker
-                    speaker_manager.superbook.append({"speaker": "Narrator", "text": part["text"]})
+                    # For narration outside quotes, keep the narrator
+                    current_speaker = "Narrator"
+
+                speaker_history.append(current_speaker)
+                speaker_manager.superbook.append({"speaker": "Narrator", "text": part["text"]})
 
 
 
