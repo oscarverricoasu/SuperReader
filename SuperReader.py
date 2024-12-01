@@ -114,7 +114,7 @@ def apply_pitch_shift_librosa(audio_path, pitch_factor, output_path):
         else:
             y_shifted = y
 
-        # Write the output audio
+        # Export the altered audio
         sf.write(output_path, y_shifted, sr)
         print(f"Audio exported with pitch factor: {pitch_factor} to '{output_path}'")
 
