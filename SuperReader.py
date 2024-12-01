@@ -15,28 +15,17 @@ import soundfile as sf
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
 
-# Load SpaCy Model and TTS
+# Load SpaCy Model and TTS stuff
 nlp = spacy.load("en_core_web_sm")
 try:
     print("Loading TTS model...")
     tts_model = TTS(model_name="tts_models/en/ljspeech/tacotron2-DDC", gpu=False)
-    print("Model loaded successfully!")
+    print("Models loaded successfully!")
 except Exception as e:
     print(f"Error loading TTS model: {e}")
 
 PITCH_FACTOR_RANGE = (0.8, 1.3)
 
-# Clear audio directory before processing
-def clear_audio_directory(directory):
-    if os.path.exists(directory):
-        for filename in os.listdir(directory):
-            file_path = os.path.join(directory, filename)
-            try:
-                if os.path.isfile(file_path):
-                    os.unlink(file_path)
-                    print(f"Deleted file: {file_path}")
-            except Exception as e:
-                logging.error(f"Error deleting file {file_path}: {e}")
 
 # This will be the main encapsulation for speakers and the superbook structures
 class SpeakerManager:
@@ -67,59 +56,6 @@ class SpeakerManager:
     def get_speaker(self, name):
         return next((s for s in self.speakers if s["name"] == name), None)
 
-# Generate audiobook files with multithreading
-def generate_audio_with_librosa(speaker_manager):
-    def process_entry(index, entry, num_digits):
-        try:
-            speaker_name = entry['speaker']
-            text = entry['text']
-            speaker_data = speaker_manager.get_speaker(speaker_name)
-
-            if not speaker_data:
-                logging.warning(f"No speaker data found for {speaker_name}, skipping.")
-                return
-
-            # Generate audio using TTS model
-            temp_audio_path = f"audio/temp_{index}.wav"
-            output_audio_path = f"audio/{str(index).zfill(num_digits)}_{speaker_name}.wav"
-
-            tts_model.tts_to_file(text=text, file_path=temp_audio_path)
-
-            # Apply pitch shift with librosa
-            apply_pitch_shift_librosa(temp_audio_path, speaker_data['pitch_factor'], output_audio_path)
-
-            # Clean up temporary audio file
-            if os.path.exists(temp_audio_path):
-                os.remove(temp_audio_path)
-
-        except Exception as e:
-            logging.error(f"Error processing audio for entry {index}: {e}")
-
-    total_entries = len(speaker_manager.superbook)
-    num_digits = len(str(total_entries))
-    with ThreadPoolExecutor() as executor:
-        for index, entry in enumerate(speaker_manager.superbook, 1):
-            executor.submit(process_entry, index, entry, num_digits)
-
-# Modifies a character's line by their unique pitch factor to have a distinct voice using librosa
-def apply_pitch_shift_librosa(audio_path, pitch_factor, output_path):
-    try:
-        # Load audio file
-        y, sr = librosa.load(audio_path, sr=None)
-
-        # Calculate n_steps based on the pitch factor
-        if pitch_factor != 1:
-            n_steps = (pitch_factor - 1) * 12  # Convert pitch factor to semitones
-            y_shifted = librosa.effects.pitch_shift(y, sr=sr, n_steps=n_steps)
-        else:
-            y_shifted = y
-
-        # Export the altered audio
-        sf.write(output_path, y_shifted, sr)
-        print(f"Audio exported with pitch factor: {pitch_factor} to '{output_path}'")
-
-    except Exception as e:
-        logging.error(f"Error in pitch shifting for {audio_path}: {e}")
 
 # Alternate between two unnamed speakers
 def alternate_speakers_without_person_entities(lines, speaker_manager):
@@ -137,6 +73,7 @@ def alternate_speakers_without_person_entities(lines, speaker_manager):
         # Switch to the other unnamed speaker
         current_speaker_index = (current_speaker_index + 1) % 2
 
+
 # Split lines containing both narration and dialogue with regex
 def split_narration_dialogue(line):
     pattern = r'([^"]*)(?:"([^"]*)")?'
@@ -148,6 +85,7 @@ def split_narration_dialogue(line):
         if dialogue.strip():
             parts.append({'type': 'dialogue', 'text': dialogue.strip()})
     return parts
+
 
 # Infer gender based on pronouns in the text
 def infer_gender_from_pronouns(doc):
@@ -161,6 +99,7 @@ def infer_gender_from_pronouns(doc):
             return pronoun_map[token.lower_]
     return "unknown"
 
+
 # Detect named speaker in dialogue
 def get_named_speaker(doc):
     for ent in doc.ents:
@@ -171,6 +110,7 @@ def get_named_speaker(doc):
             return token.text
     return None
 
+
 # Detect speaker from narration
 def get_speaker_from_narration(doc):
     for token in doc:
@@ -179,6 +119,7 @@ def get_speaker_from_narration(doc):
                 if child.dep_ == 'nsubj' and (child.ent_type_ == 'PERSON' or child.pos_ in ['PROPN', 'PRON']):
                     return child.text
     return None
+
 
 # Passer to guess unknown gender for named speakers
 def guess_genders_for_speakers(speaker_manager):
@@ -192,6 +133,7 @@ def guess_genders_for_speakers(speaker_manager):
                     speaker['gender'] = gender
             except Exception as e:
                 logging.error(f"Error guessing gender for {name}: {e}")
+
 
 # Process text line-by-line with improved speaker attribution
 def process_text_lines(lines, speaker_manager):
@@ -228,7 +170,96 @@ def process_text_lines(lines, speaker_manager):
                 if narrator_speaker:
                     speaker_manager.add_speaker(narrator_speaker)
 
-# Function that generates a .json file as output for the program instead of printing results in the console
+
+# Generate audiobook files with multithreading using librosa pitch shifting
+def generate_audio_with_librosa_multithreading(speaker_manager):
+    def process_entry(index, entry, num_digits):
+        try:
+            speaker_name = entry['speaker']
+            text = entry['text']
+            speaker_data = speaker_manager.get_speaker(speaker_name)
+
+            if not speaker_data:
+                logging.warning(f"No speaker data found for {speaker_name}, skipping.")
+                return
+
+            # Generate audio using TTS model
+            temp_audio_path = f"audio/temp_{index}.wav"
+            output_audio_path = f"audio/{str(index).zfill(num_digits)}_{speaker_name}.wav"
+
+            tts_model.tts_to_file(text=text, file_path=temp_audio_path)
+
+            # Apply pitch shift with librosa
+            apply_pitch_shift_librosa(temp_audio_path, speaker_data['pitch_factor'], output_audio_path)
+
+            # Clean up temporary audio file
+            if os.path.exists(temp_audio_path):
+                os.remove(temp_audio_path)
+
+        except Exception as e:
+            logging.error(f"Error processing audio for entry {index}: {e}")
+
+    total_entries = len(speaker_manager.superbook)
+    num_digits = len(str(total_entries))
+    with ThreadPoolExecutor() as executor:
+        for index, entry in enumerate(speaker_manager.superbook, 1):
+            executor.submit(process_entry, index, entry, num_digits)
+
+
+# Generate audiobook files without multithreading
+def generate_audio_without_multithreading(speaker_manager):
+    total_entries = len(speaker_manager.superbook)
+    num_digits = len(str(total_entries))
+
+    for index, entry in enumerate(speaker_manager.superbook, 1):
+        try:
+            speaker_name = entry['speaker']
+            text = entry['text']
+            speaker_data = speaker_manager.get_speaker(speaker_name)
+
+            if not speaker_data:
+                logging.warning(f"No speaker data found for {speaker_name}, skipping.")
+                continue
+
+            # Generate audio using TTS model
+            temp_audio_path = f"audio/temp_{index}.wav"
+            output_audio_path = f"audio/{str(index).zfill(num_digits)}_{speaker_name}.wav"
+
+            tts_model.tts_to_file(text=text, file_path=temp_audio_path)
+
+            # Apply pitch shift with librosa
+            apply_pitch_shift_librosa(temp_audio_path, speaker_data['pitch_factor'], output_audio_path)
+
+            # Clean up temporary audio file
+            if os.path.exists(temp_audio_path):
+                os.remove(temp_audio_path)
+
+        except Exception as e:
+            logging.error(f"Error processing audio for entry {index}: {e}")
+
+
+# Modifies a character's line by their unique pitch factor to have a distinct voice using librosa
+def apply_pitch_shift_librosa(audio_path, pitch_factor, output_path):
+    try:
+        # Load audio file
+        y, sr = librosa.load(audio_path, sr=None)
+
+        # Apply pitch shift if pitch_factor is different from 1
+        if pitch_factor != 1:
+            n_steps = (pitch_factor - 1) * 12  # Convert pitch factor to semitones
+            y_shifted = librosa.effects.pitch_shift(y, sr=sr, n_steps=n_steps)
+        else:
+            y_shifted = y
+
+        # Write the output audio
+        sf.write(output_path, y_shifted, sr)
+        print(f"Audio exported with pitch factor: {pitch_factor} to '{output_path}'")
+
+    except Exception as e:
+        logging.error(f"Error in pitch shifting for {audio_path}: {e}")
+
+
+# Function that generate a .json file as output for the program instead of printing results in the console
 def save_to_jsonl(speaker_manager, filename):
     """Saves the results to a JSONL file."""
     output_file = f"{os.path.splitext(filename)[0]}.jsonl"
@@ -240,6 +271,16 @@ def save_to_jsonl(speaker_manager, filename):
                 writer.write({"superbook": entry})
     except Exception as e:
         logging.error(f"Error saving results: {e}")
+
+
+# Function to clear audio directory
+def clear_audio_directory(audio_directory):
+    for filename in os.listdir(audio_directory):
+        file_path = os.path.join(audio_directory, filename)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+            print(f"Deleted file: {file_path}")
+
 
 # Driver to process the input file
 def main():
@@ -284,9 +325,15 @@ def main():
     # Query for missing gender for named speakers
     guess_genders_for_speakers(speaker_manager)
 
+    # Prompt the user to choose between multithreading or single-threaded processing
+    use_multithreading = input("Would you like to use multithreading for audio generation? (yes/no): ").strip().lower()
+
     # Generate Audio
     start_audio = time.time()
-    generate_audio_with_librosa(speaker_manager)
+    if use_multithreading == 'yes':
+        generate_audio_with_librosa_multithreading(speaker_manager)
+    else:
+        generate_audio_without_multithreading(speaker_manager)
     end_audio = time.time()
 
     # Output results
@@ -297,6 +344,7 @@ def main():
     logging.info(f"Processing time: {end_process - start_process:.2f} seconds")
     logging.info(f"Audio generation time: {end_audio - start_audio:.2f} seconds")
     logging.info("Processing complete!")
+
 
 if __name__ == "__main__":
     main()
