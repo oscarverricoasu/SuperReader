@@ -1,7 +1,7 @@
 {"speakers": {"name": "Narrator", "gender": "unknown", "number": "singular", "pitch_factor": 1}}
-{"speakers": {"name": "Calvin", "gender": "male", "number": "singular", "pitch factor": 0.8390699231665361}}
-{"speakers": {"name": "Charles", "gender": "male", "number": "singular", "pitch factor": 0.9251058715349076}}
-{"speakers": {"name": "Meg", "gender": "female", "number": "singular", "pitch factor": 0.8039476594181832}}
+{"speakers": {"name": "Calvin", "gender": "male", "number": "singular", "pitch_factor": 1.2846706865102329}}
+{"speakers": {"name": "Charles", "gender": "male", "number": "singular", "pitch_factor": 0.8063350521924945}}
+{"speakers": {"name": "Meg", "gender": "female", "number": "singular", "pitch_factor": 1.21940479961941}}
 {"superbook": {"speaker": "Narrator", "text": "Calvin licked his lips."}}
 {"superbook": {"speaker": "Calvin", "text": "Where are we going?"}}
 {"superbook": {"speaker": "Charles", "text": "Up."}}
@@ -9,7 +9,7 @@
 {"superbook": {"speaker": "Charles", "text": "On Camazotz we are all happy because we are all alike. Differences create problems. You know that, don't you, dear sister?"}}
 {"superbook": {"speaker": "Meg", "text": "No,"}}
 {"superbook": {"speaker": "Narrator", "text": "Meg said."}}
-{"superbook": {"speaker": "Narrator", "text": "Oh, yes, you do. You've seen at home how true it is. You know that you're not happy at school. Because you're different.”"}}
+{"superbook": {"speaker": "Narrator", "text": "Oh, yes, you do. You've seen at home how true it is. You know that you're not happy at school. Because you're different."}}
 {"superbook": {"speaker": "Calvin", "text": "I'm different, and I'm happy,"}}
 {"superbook": {"speaker": "Narrator", "text": "Calvin said."}}
 {"superbook": {"speaker": "Calvin", "text": "But you pretend that you aren't different."}}
