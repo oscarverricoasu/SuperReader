@@ -153,8 +153,7 @@ def detect_attribution(text):
 
 # Process text line-by-line with improved speaker attribution
 def process_text_lines(lines, speaker_manager):
-    current_speaker = None  # Tracks the active speaker
-    previous_speaker = None  # Tracks the last dialogue speaker
+    last_quoted_speaker = None  # Tracks the last speaker of quoted dialogue
 
     for line in lines:
         line = clean_text(line)  # Clean the line before processing
@@ -167,25 +166,26 @@ def process_text_lines(lines, speaker_manager):
 
         for part in line_parts:
             if part['type'] == 'dialogue':
-                # Dialogue handling
+                # Dialogue handling (inside quotes)
                 if named_speaker:
-                    # Update speaker context if a named speaker is identified
-                    current_speaker = named_speaker
-                    speaker_manager.add_speaker(current_speaker, gender)
+                    # Update last quoted speaker if a named speaker is detected
+                    last_quoted_speaker = named_speaker
+                    speaker_manager.add_speaker(last_quoted_speaker, gender)
                 else:
-                    # Default to the previous speaker for ambiguous lines
-                    current_speaker = previous_speaker if previous_speaker else "Unnamed Speaker 1"
+                    # Use the last quoted speaker for ambiguous dialogue
+                    if last_quoted_speaker:
+                        current_speaker = last_quoted_speaker
+                    else:
+                        current_speaker = "Unnamed Speaker 1"  # Fallback for unnamed speakers
                 speaker_manager.superbook.append({"speaker": current_speaker, "text": part["text"]})
-                previous_speaker = current_speaker  # Update previous speaker
             else:
-                # Narration handling
+                # Narration handling (outside quotes)
                 attribution = detect_attribution(part["text"])
                 if attribution:
-                    # If attribution is found (e.g., "said Meg"), update current speaker
-                    current_speaker = attribution
-                    speaker_manager.add_speaker(current_speaker)
-                    previous_speaker = current_speaker  # Update previous speaker context
-                # Add narration to the superbook, but don't overwrite speaker context
+                    # Update the speaker context if attribution is found (e.g., "said Meg")
+                    last_quoted_speaker = attribution
+                    speaker_manager.add_speaker(last_quoted_speaker)
+                # Add narration to the superbook without affecting dialogue context
                 speaker_manager.superbook.append({"speaker": "Narrator", "text": part["text"]})
 
 
