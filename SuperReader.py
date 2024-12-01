@@ -174,8 +174,11 @@ def process_text_lines(lines, speaker_manager):
                     last_quoted_speaker = current_speaker
                     speaker_manager.add_speaker(current_speaker, gender)
                 else:
-                    # If no named speaker, default to the last quoted speaker
-                    current_speaker = last_quoted_speaker if last_quoted_speaker else "Unnamed Speaker 1"
+                    # Default to the last quoted speaker for ambiguous dialogue
+                    if last_quoted_speaker:
+                        current_speaker = last_quoted_speaker
+                    else:
+                        current_speaker = "Unnamed Speaker 1"  # Fallback for unnamed speakers
                 speaker_manager.superbook.append({"speaker": current_speaker, "text": part["text"]})
             else:
                 # Handle narration parts
@@ -187,8 +190,13 @@ def process_text_lines(lines, speaker_manager):
                     speaker_manager.add_speaker(current_speaker)
                     speaker_manager.superbook.append({"speaker": "Narrator", "text": part["text"]})
                 else:
-                    # If no attribution, assign as general narration
+                    # For narration outside quotes, keep the narrator but check context
+                    if "you" in part["text"].lower() or "your" in part["text"].lower() or "you've" in part["text"].lower():
+                        # Default to the last quoted speaker for "you" pronoun ambiguity
+                        if last_quoted_speaker:
+                            current_speaker = last_quoted_speaker
                     speaker_manager.superbook.append({"speaker": "Narrator", "text": part["text"]})
+
 
 
 # Generate audiobook files with multithreading using librosa pitch shifting
