@@ -169,24 +169,26 @@ def process_text_lines(lines, speaker_manager):
                 # Dialogue handling (inside quotes)
                 if named_speaker:
                     # Update last quoted speaker if a named speaker is detected
-                    last_quoted_speaker = named_speaker
-                    speaker_manager.add_speaker(last_quoted_speaker, gender)
+                    current_speaker = named_speaker
+                    speaker_manager.add_speaker(current_speaker, gender)
+                    last_quoted_speaker = current_speaker
                 else:
                     # Use the last quoted speaker for ambiguous dialogue
-                    if last_quoted_speaker:
-                        current_speaker = last_quoted_speaker
-                    else:
-                        current_speaker = "Unnamed Speaker 1"  # Fallback for unnamed speakers
+                    current_speaker = last_quoted_speaker if last_quoted_speaker else "Unnamed Speaker 1"
                 speaker_manager.superbook.append({"speaker": current_speaker, "text": part["text"]})
             else:
                 # Narration handling (outside quotes)
                 attribution = detect_attribution(part["text"])
                 if attribution:
                     # Update the speaker context if attribution is found (e.g., "said Meg")
-                    last_quoted_speaker = attribution
-                    speaker_manager.add_speaker(last_quoted_speaker)
-                # Add narration to the superbook without affecting dialogue context
+                    current_speaker = attribution
+                    speaker_manager.add_speaker(current_speaker)
+                    last_quoted_speaker = current_speaker
+                else:
+                    # Default to Narrator for pure narration
+                    current_speaker = "Narrator"
                 speaker_manager.superbook.append({"speaker": "Narrator", "text": part["text"]})
+
 
 
 
