@@ -107,9 +107,10 @@ def apply_pitch_shift_librosa(audio_path, pitch_factor, output_path):
         # Load audio file
         y, sr = librosa.load(audio_path, sr=None)
 
-        # Apply pitch shift using librosa's effects
+        # Calculate n_steps based on the pitch factor
         if pitch_factor != 1:
-            y_shifted = librosa.effects.pitch_shift(y, sr, n_steps=pitch_factor * 12 - 12)  # Adjust pitch factor to semitones
+            n_steps = (pitch_factor - 1) * 12  # Convert pitch factor to semitones
+            y_shifted = librosa.effects.pitch_shift(y, sr=sr, n_steps=n_steps)
         else:
             y_shifted = y
 
