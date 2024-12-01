@@ -142,11 +142,19 @@ def guess_genders_for_speakers(speaker_manager):
             except Exception as e:
                 logging.error(f"Error guessing gender for {name}: {e}")
 
+# Detects attribution tags for in narration cases
+def detect_attribution(text):
+    attribution_pattern = r'\b(said|asked|replied|shouted|whispered|added) (\w+)'
+    match = re.search(attribution_pattern, text)
+    if match:
+        return match.group(2)  # Return the detected speaker's name
+    return None
+
 
 # Process text line-by-line with improved speaker attribution
 def process_text_lines(lines, speaker_manager):
     current_speaker = "Narrator"
-    last_quoted_speaker = None  # Tracks the last speaker in quotation marks
+    last_quoted_speaker = None  # Tracks the last speaker for dialogue
 
     for line in lines:
         line = clean_text(line)  # Clean the line before processing
@@ -159,31 +167,28 @@ def process_text_lines(lines, speaker_manager):
 
         for part in line_parts:
             if part['type'] == 'dialogue':
-                # If a named speaker is found, update the current speaker
+                # Handle dialogue parts
                 if named_speaker:
+                    # Update the current speaker to the named speaker
                     current_speaker = named_speaker
                     last_quoted_speaker = current_speaker
                     speaker_manager.add_speaker(current_speaker, gender)
                 else:
-                    # Handle ambiguous dialogue
-                    if "you" in part['text'].lower() or "your" in part['text'].lower() or "you've" in part['text'].lower():
-                        # Default to the last quoted speaker
-                        if last_quoted_speaker:
-                            current_speaker = last_quoted_speaker
-                        else:
-                            current_speaker = "Unnamed Speaker 1"
-                    # Otherwise, keep the current speaker
-                speaker_manager.superbook.append({"speaker": current_speaker, 'text': part['text']})
+                    # If no named speaker, default to the last quoted speaker
+                    current_speaker = last_quoted_speaker if last_quoted_speaker else "Unnamed Speaker 1"
+                speaker_manager.superbook.append({"speaker": current_speaker, "text": part["text"]})
             else:
-                # Handle narration
-                narrator_speaker = get_speaker_from_narration(nlp(part['text']))
-                if narrator_speaker:
-                    speaker_manager.add_speaker(narrator_speaker)
-                    current_speaker = narrator_speaker
+                # Handle narration parts
+                attribution = detect_attribution(part["text"])
+                if attribution:
+                    # If attribution is found (e.g., "said Meg"), update the speaker
+                    current_speaker = attribution
+                    last_quoted_speaker = current_speaker
+                    speaker_manager.add_speaker(current_speaker)
+                    speaker_manager.superbook.append({"speaker": "Narrator", "text": part["text"]})
                 else:
-                    speaker_manager.superbook.append({'speaker': 'Narrator', 'text': part['text']})
-
-
+                    # If no attribution, assign as general narration
+                    speaker_manager.superbook.append({"speaker": "Narrator", "text": part["text"]})
 
 
 # Generate audiobook files with multithreading using librosa pitch shifting
