@@ -25,6 +25,7 @@ except Exception as e:
     print(f"Error loading TTS model: {e}")
 
 PITCH_FACTOR_RANGE = (0.8, 1.3)
+MIN_AUDIO_DURATION = 0.5  # Minimum duration (in seconds) for an audio file to be processed for pitch shifting
 
 
 # This will be the main encapsulation for speakers and the superbook structures
@@ -85,6 +86,11 @@ def split_narration_dialogue(line):
         if dialogue.strip():
             parts.append({'type': 'dialogue', 'text': dialogue.strip()})
     return parts
+
+
+# Clean non-standard characters from the text
+def clean_text(text):
+    return re.sub(r'[^\x00-\x7F]+', '', text)
 
 
 # Infer gender based on pronouns in the text
@@ -150,6 +156,7 @@ def process_text_lines(lines, speaker_manager):
         return
 
     for line in lines:
+        line = clean_text(line)  # Clean the line before processing
         line_doc = nlp(line)
         named_speaker = get_named_speaker(line_doc)
         gender = infer_gender_from_pronouns(line_doc) if named_speaker else "unknown"
@@ -189,8 +196,16 @@ def generate_audio_with_librosa_multithreading(speaker_manager):
 
             tts_model.tts_to_file(text=text, file_path=temp_audio_path)
 
+            # Check audio duration
+            y, sr = librosa.load(temp_audio_path, sr=None)
+            duration = librosa.get_duration(y=y, sr=sr)
+            if duration < MIN_AUDIO_DURATION:
+                logging.warning(f"Audio for entry {index} is too short for pitch shifting. Skipping.")
+                sf.write(output_audio_path, y, sr)
+                return
+
             # Apply pitch shift with librosa
-            apply_pitch_shift_librosa(temp_audio_path, speaker_data['pitch_factor'], output_audio_path)
+            apply_pitch_shift_librosa(y, sr, speaker_data['pitch_factor'], output_audio_path)
 
             # Clean up temporary audio file
             if os.path.exists(temp_audio_path):
@@ -206,44 +221,9 @@ def generate_audio_with_librosa_multithreading(speaker_manager):
             executor.submit(process_entry, index, entry, num_digits)
 
 
-# Generate audiobook files without multithreading
-def generate_audio_without_multithreading(speaker_manager):
-    total_entries = len(speaker_manager.superbook)
-    num_digits = len(str(total_entries))
-
-    for index, entry in enumerate(speaker_manager.superbook, 1):
-        try:
-            speaker_name = entry['speaker']
-            text = entry['text']
-            speaker_data = speaker_manager.get_speaker(speaker_name)
-
-            if not speaker_data:
-                logging.warning(f"No speaker data found for {speaker_name}, skipping.")
-                continue
-
-            # Generate audio using TTS model
-            temp_audio_path = f"audio/temp_{index}.wav"
-            output_audio_path = f"audio/{str(index).zfill(num_digits)}_{speaker_name}.wav"
-
-            tts_model.tts_to_file(text=text, file_path=temp_audio_path)
-
-            # Apply pitch shift with librosa
-            apply_pitch_shift_librosa(temp_audio_path, speaker_data['pitch_factor'], output_audio_path)
-
-            # Clean up temporary audio file
-            if os.path.exists(temp_audio_path):
-                os.remove(temp_audio_path)
-
-        except Exception as e:
-            logging.error(f"Error processing audio for entry {index}: {e}")
-
-
-# Modifies a character's line by their unique pitch factor to have a distinct voice using librosa
-def apply_pitch_shift_librosa(audio_path, pitch_factor, output_path):
+# Apply pitch shift with librosa
+def apply_pitch_shift_librosa(y, sr, pitch_factor, output_path):
     try:
-        # Load audio file
-        y, sr = librosa.load(audio_path, sr=None)
-
         # Apply pitch shift if pitch_factor is different from 1
         if pitch_factor != 1:
             n_steps = (pitch_factor - 1) * 12  # Convert pitch factor to semitones
@@ -256,30 +236,7 @@ def apply_pitch_shift_librosa(audio_path, pitch_factor, output_path):
         print(f"Audio exported with pitch factor: {pitch_factor} to '{output_path}'")
 
     except Exception as e:
-        logging.error(f"Error in pitch shifting for {audio_path}: {e}")
-
-
-# Function that generate a .json file as output for the program instead of printing results in the console
-def save_to_jsonl(speaker_manager, filename):
-    """Saves the results to a JSONL file."""
-    output_file = f"{os.path.splitext(filename)[0]}.jsonl"
-    try:
-        with jsonlines.open(output_file, mode="w") as writer:
-            for speaker in speaker_manager.speakers:
-                writer.write({"speakers": speaker})
-            for entry in speaker_manager.superbook:
-                writer.write({"superbook": entry})
-    except Exception as e:
-        logging.error(f"Error saving results: {e}")
-
-
-# Function to clear audio directory
-def clear_audio_directory(audio_directory):
-    for filename in os.listdir(audio_directory):
-        file_path = os.path.join(audio_directory, filename)
-        if os.path.isfile(file_path):
-            os.remove(file_path)
-            print(f"Deleted file: {file_path}")
+        logging.error(f"Error in pitch shifting for audio: {e}")
 
 
 # Driver to process the input file
