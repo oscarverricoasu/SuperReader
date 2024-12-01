@@ -195,7 +195,7 @@ def process_text_lines(lines, speaker_manager):
 
 # Generate audiobook files with multithreading using librosa pitch shifting
 def generate_audio_with_librosa_multithreading(speaker_manager):
-    def process_entry(index, entry, num_digits):
+    def process_entry(index, entry):
         try:
             speaker_name = entry['speaker']
             text = entry['text']
@@ -207,20 +207,13 @@ def generate_audio_with_librosa_multithreading(speaker_manager):
 
             # Generate audio using TTS model
             temp_audio_path = f"audio/temp_{index}.wav"
-            output_audio_path = f"audio/{str(index).zfill(num_digits)}_{speaker_name}.wav"
+            output_audio_path = f"audio/{str(index).zfill(2)}_{speaker_name}.wav"
 
             tts_model.tts_to_file(text=text, file_path=temp_audio_path)
 
-            # Check audio duration
+            # Load the temporary audio file and apply pitch shifting if needed
             y, sr = librosa.load(temp_audio_path, sr=None)
-            duration = librosa.get_duration(y=y, sr=sr)
-            if duration < MIN_AUDIO_DURATION:
-                logging.warning(f"Audio for entry {index} is too short for pitch shifting. Skipping.")
-                sf.write(output_audio_path, y, sr)
-                return
-
-            # Apply pitch shift with librosa
-            apply_pitch_shift_librosa(y, sr, speaker_data['pitch_factor'], output_audio_path)
+            apply_pitch_shift_librosa(y, sr, speaker_data["pitch_factor"], output_audio_path)
 
             # Clean up temporary audio file
             if os.path.exists(temp_audio_path):
@@ -229,11 +222,10 @@ def generate_audio_with_librosa_multithreading(speaker_manager):
         except Exception as e:
             logging.error(f"Error processing audio for entry {index}: {e}")
 
-    total_entries = len(speaker_manager.superbook)
-    num_digits = len(str(total_entries))
+    # Use multithreading to process entries in parallel
     with ThreadPoolExecutor() as executor:
         for index, entry in enumerate(speaker_manager.superbook, 1):
-            executor.submit(process_entry, index, entry, num_digits)
+            executor.submit(process_entry, index, entry)
 
 
 # Generate audiobook files without multithreading using librosa pitch shifting
