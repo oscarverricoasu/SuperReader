@@ -16,7 +16,7 @@ class Parse(HTMLParser): #html parser for epub
 
 class readfile:
     def getInput(self): #Only finds files in the same directory right now
-        file = input("Input name of file (.txt, .pdf, or .epub) with filetype at end:\n")
+        file = input("\nInput name of file (.txt, .pdf, or .epub) with filetype at end:\n")
         return file
 
     def checkFile(self, file): #check if file exists

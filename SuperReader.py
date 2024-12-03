@@ -314,7 +314,7 @@ def combine_audio_files(directory, output_filename):
             audio_segment = AudioSegment.from_wav(file_path)
             combined += audio_segment + AudioSegment.silent(duration=DELAY_BETWEEN_LINES_MS)
     combined.export(output_filename, format="wav")
-    print(f"Combined audio file saved as '{output_filename}'")
+    print(f"\nCombined audio file saved as '{output_filename}'")
 
 
 # Function that generate a .json file as output for the program instead of printing results in the console
@@ -339,9 +339,9 @@ def main():
     audio_directory = "./audio"
     if not os.path.exists(audio_directory):
         os.makedirs(audio_directory)
-        print(f"Directory '{audio_directory}' created.")
+        print(f"\nDirectory '{audio_directory}' created.")
     else:
-        print(f"Directory '{audio_directory}' already exists.")
+        print(f"\nDirectory '{audio_directory}' already exists.")
         # Clear the audio directory before generating new files
         clear_audio_directory(audio_directory)
 
@@ -375,7 +375,7 @@ def main():
     guess_genders_for_speakers(speaker_manager)
 
     # Prompt the user to choose between multithreading or single-threaded processing
-    use_multithreading = input("Would you like to use multithreading for audio generation? (yes/no): ").strip().lower()
+    use_multithreading = input("\nWould you like to use multithreading for audio generation? (yes/no): ").strip().lower()
 
     # Generate Audio
     start_audio = time.time()
@@ -393,10 +393,10 @@ def main():
     save_to_jsonl(speaker_manager, input_file)
 
     # Timers and logging
-    logging.info(f"Loading time: {end_load - start_load:.2f} seconds")
+    logging.info(f"\nLoading time: {end_load - start_load:.2f} seconds")
     logging.info(f"Processing time: {end_process - start_process:.2f} seconds")
     logging.info(f"Audio generation time: {end_audio - start_audio:.2f} seconds")
-    logging.info("Processing complete!")
+    logging.info(f"\nProcessing complete! Saved combined file at {combined_audio_filename}")
 
 
 if __name__ == "__main__":
